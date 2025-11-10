@@ -1,0 +1,1425 @@
+================================================================================
+                    TRAVELQUEST DATABASE SCHEMA (SQL)
+                    Complete Table Structures & Relationships
+                    NORMALIZED TO 3NF (Third Normal Form)
+================================================================================
+
+NORMALIZATION NOTES:
+- 1NF: Eliminated repeating groups, ensured atomic values
+- 2NF: Removed partial dependencies, all non-key attributes fully dependent on primary key
+- 3NF: Removed transitive dependencies, separated lookup/reference tables
+- Foreign keys ensure referential integrity
+- Lookup tables created for categories, statuses, and types
+
+-- ============================================================================
+-- LOOKUP/REFERENCE TABLES (Normalization - Separate Categories & Types)
+-- ============================================================================
+
+-- User Roles Lookup Table
+CREATE TABLE user_roles (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    role_code VARCHAR(20) UNIQUE NOT NULL,
+    role_name VARCHAR(50) NOT NULL,
+    description TEXT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- User Status Lookup Table
+CREATE TABLE user_statuses (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    status_code VARCHAR(20) UNIQUE NOT NULL,
+    status_name VARCHAR(50) NOT NULL,
+    description TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Destination Categories Lookup Table
+CREATE TABLE destination_categories (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    category_code VARCHAR(20) UNIQUE NOT NULL,
+    category_name VARCHAR(50) NOT NULL,
+    icon VARCHAR(50) NULL,
+    color VARCHAR(50) NULL,
+    description TEXT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Reward Categories Lookup Table
+CREATE TABLE reward_categories (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    category_code VARCHAR(20) UNIQUE NOT NULL,
+    category_name VARCHAR(50) NOT NULL,
+    icon VARCHAR(50) NULL,
+    description TEXT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Badge Tiers Lookup Table
+CREATE TABLE badge_tiers (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tier_code VARCHAR(20) UNIQUE NOT NULL,
+    tier_name VARCHAR(50) NOT NULL,
+    color VARCHAR(50) NULL,
+    min_points INT DEFAULT 0,
+    display_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Countries Lookup Table (For addresses)
+CREATE TABLE countries (
+    id SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    country_code CHAR(2) UNIQUE NOT NULL,
+    country_name VARCHAR(100) NOT NULL,
+    phone_code VARCHAR(10) NULL,
+    currency_code CHAR(3) NULL,
+    is_active BOOLEAN DEFAULT TRUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Regions/Provinces Lookup Table
+CREATE TABLE regions (
+    id SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    country_id SMALLINT UNSIGNED NOT NULL,
+    region_code VARCHAR(20) NOT NULL,
+    region_name VARCHAR(100) NOT NULL,
+    FOREIGN KEY (country_id) REFERENCES countries(id),
+    INDEX idx_country (country_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Cities Lookup Table
+CREATE TABLE cities (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    region_id SMALLINT UNSIGNED NOT NULL,
+    city_name VARCHAR(100) NOT NULL,
+    latitude DECIMAL(10, 8) NULL,
+    longitude DECIMAL(11, 8) NULL,
+    FOREIGN KEY (region_id) REFERENCES regions(id),
+    INDEX idx_region (region_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- USERS & AUTHENTICATION TABLES (NORMALIZED)
+-- ============================================================================
+
+-- Users Table (Main user accounts) - NORMALIZED
+CREATE TABLE users (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    email_verified_at TIMESTAMP NULL,
+    password VARCHAR(255) NOT NULL,
+    role_id TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    status_id TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    remember_token VARCHAR(100) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL,
+    FOREIGN KEY (role_id) REFERENCES user_roles(id),
+    FOREIGN KEY (status_id) REFERENCES user_statuses(id),
+    INDEX idx_email (email),
+    INDEX idx_role (role_id),
+    INDEX idx_status (status_id),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- User Profiles Table (Separated from users - 1:1 relationship)
+CREATE TABLE user_profiles (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED UNIQUE NOT NULL,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    display_name VARCHAR(255) NULL,
+    phone VARCHAR(20) NULL,
+    avatar VARCHAR(255) NULL,
+    bio TEXT NULL,
+    date_of_birth DATE NULL,
+    gender ENUM('male', 'female', 'other', 'prefer_not_to_say') NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- User Addresses Table (Normalized - separate addresses)
+CREATE TABLE user_addresses (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    address_type ENUM('home', 'work', 'billing', 'shipping') DEFAULT 'home',
+    address_line1 VARCHAR(255) NOT NULL,
+    address_line2 VARCHAR(255) NULL,
+    city_id INT UNSIGNED NULL,
+    postal_code VARCHAR(20) NULL,
+    is_primary BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE SET NULL,
+    INDEX idx_user (user_id),
+    INDEX idx_city (city_id),
+    INDEX idx_primary (is_primary)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- User Statistics Table (Calculated/derived data separated)
+CREATE TABLE user_statistics (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED UNIQUE NOT NULL,
+    points INT DEFAULT 0,
+    total_visits INT DEFAULT 0,
+    total_reviews INT DEFAULT 0,
+    rewards_redeemed INT DEFAULT 0,
+    badges_earned INT DEFAULT 0,
+    current_streak INT DEFAULT 0,
+    best_streak INT DEFAULT 0,
+    last_visit_date DATE NULL,
+    level INT DEFAULT 1,
+    experience_points INT DEFAULT 0,
+    total_distance_km DECIMAL(10, 2) DEFAULT 0.00,
+    total_points_earned INT DEFAULT 0,
+    total_points_spent INT DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user (user_id),
+    INDEX idx_points (points),
+    INDEX idx_level (level)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Admin Roles Lookup Table
+CREATE TABLE admin_roles (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    role_code VARCHAR(20) UNIQUE NOT NULL,
+    role_name VARCHAR(50) NOT NULL,
+    description TEXT NULL,
+    level INT DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Admin Permissions Lookup Table
+CREATE TABLE admin_permissions (
+    id SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    permission_code VARCHAR(50) UNIQUE NOT NULL,
+    permission_name VARCHAR(100) NOT NULL,
+    description TEXT NULL,
+    module VARCHAR(50) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Admin Accounts Table (Normalized)
+CREATE TABLE admins (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED UNIQUE NOT NULL,
+    admin_role_id TINYINT UNSIGNED NOT NULL,
+    last_login_at TIMESTAMP NULL,
+    login_count INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (admin_role_id) REFERENCES admin_roles(id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_role (admin_role_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Admin Role Permissions (Many-to-Many relationship)
+CREATE TABLE admin_role_permissions (
+    admin_role_id TINYINT UNSIGNED NOT NULL,
+    admin_permission_id SMALLINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (admin_role_id, admin_permission_id),
+    FOREIGN KEY (admin_role_id) REFERENCES admin_roles(id) ON DELETE CASCADE,
+    FOREIGN KEY (admin_permission_id) REFERENCES admin_permissions(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Password Resets Table
+CREATE TABLE password_resets (
+    email VARCHAR(255) NOT NULL,
+    token VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_email (email),
+    INDEX idx_token (token)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Personal Access Tokens (API authentication)
+CREATE TABLE personal_access_tokens (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tokenable_type VARCHAR(255) NOT NULL,
+    tokenable_id BIGINT UNSIGNED NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    token VARCHAR(64) UNIQUE NOT NULL,
+    abilities TEXT NULL,
+    last_used_at TIMESTAMP NULL,
+    expires_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_tokenable (tokenable_type, tokenable_id),
+    INDEX idx_token (token)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- User Sessions Table
+CREATE TABLE sessions (
+    id VARCHAR(255) PRIMARY KEY,
+    user_id BIGINT UNSIGNED NULL,
+    ip_address VARCHAR(45) NULL,
+    user_agent TEXT NULL,
+    payload LONGTEXT NOT NULL,
+    last_activity INT NOT NULL,
+    INDEX idx_user_id (user_id),
+    INDEX idx_last_activity (last_activity)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- DESTINATIONS & LOCATIONS TABLES (NORMALIZED)
+-- ============================================================================
+
+-- Destination Status Lookup Table
+CREATE TABLE destination_statuses (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    status_code VARCHAR(20) UNIQUE NOT NULL,
+    status_name VARCHAR(50) NOT NULL,
+    description TEXT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Destinations Table (NORMALIZED - Core info only)
+CREATE TABLE destinations (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    slug VARCHAR(255) UNIQUE NOT NULL,
+    category_id TINYINT UNSIGNED NOT NULL,
+    description TEXT NULL,
+    full_description LONGTEXT NULL,
+    city_id INT UNSIGNED NULL,
+    latitude DECIMAL(10, 8) NOT NULL,
+    longitude DECIMAL(11, 8) NOT NULL,
+    points_reward INT DEFAULT 50,
+    status_id TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    featured BOOLEAN DEFAULT FALSE,
+    featured_order INT NULL,
+    created_by BIGINT UNSIGNED NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL,
+    FOREIGN KEY (category_id) REFERENCES destination_categories(id),
+    FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE SET NULL,
+    FOREIGN KEY (status_id) REFERENCES destination_statuses(id),
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_category (category_id),
+    INDEX idx_status (status_id),
+    INDEX idx_city (city_id),
+    INDEX idx_location (latitude, longitude),
+    INDEX idx_points (points_reward),
+    INDEX idx_featured (featured),
+    FULLTEXT idx_search (name, description)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Destination Details Table (Extended info - 1:1)
+CREATE TABLE destination_details (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    destination_id BIGINT UNSIGNED UNIQUE NOT NULL,
+    address_line1 VARCHAR(255) NULL,
+    address_line2 VARCHAR(255) NULL,
+    postal_code VARCHAR(20) NULL,
+    contact_number VARCHAR(20) NULL,
+    contact_email VARCHAR(255) NULL,
+    website VARCHAR(255) NULL,
+    primary_image_url VARCHAR(255) NULL,
+    qr_code VARCHAR(255) NULL,
+    qr_signature VARCHAR(255) NULL,
+    qr_expires_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (destination_id) REFERENCES destinations(id) ON DELETE CASCADE,
+    INDEX idx_destination (destination_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Destination Statistics Table (Calculated data)
+CREATE TABLE destination_statistics (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    destination_id BIGINT UNSIGNED UNIQUE NOT NULL,
+    rating DECIMAL(3, 2) DEFAULT 0.00,
+    review_count INT DEFAULT 0,
+    visit_count INT DEFAULT 0,
+    unique_visitors INT DEFAULT 0,
+    favorite_count INT DEFAULT 0,
+    photo_count INT DEFAULT 0,
+    last_visit_at TIMESTAMP NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (destination_id) REFERENCES destinations(id) ON DELETE CASCADE,
+    INDEX idx_destination (destination_id),
+    INDEX idx_rating (rating),
+    INDEX idx_visits (visit_count)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Destination Amenities Lookup Table
+CREATE TABLE amenities (
+    id SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    amenity_code VARCHAR(50) UNIQUE NOT NULL,
+    amenity_name VARCHAR(100) NOT NULL,
+    icon VARCHAR(50) NULL,
+    category VARCHAR(50) NULL,
+    is_active BOOLEAN DEFAULT TRUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Destination Amenities (Many-to-Many)
+CREATE TABLE destination_amenities (
+    destination_id BIGINT UNSIGNED NOT NULL,
+    amenity_id SMALLINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (destination_id, amenity_id),
+    FOREIGN KEY (destination_id) REFERENCES destinations(id) ON DELETE CASCADE,
+    FOREIGN KEY (amenity_id) REFERENCES amenities(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Destination Operating Hours (Normalized schedule)
+CREATE TABLE destination_operating_hours (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    destination_id BIGINT UNSIGNED NOT NULL,
+    day_of_week TINYINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+    opens_at TIME NULL,
+    closes_at TIME NULL,
+    is_closed BOOLEAN DEFAULT FALSE,
+    notes VARCHAR(255) NULL,
+    FOREIGN KEY (destination_id) REFERENCES destinations(id) ON DELETE CASCADE,
+    INDEX idx_destination (destination_id),
+    UNIQUE KEY unique_destination_day (destination_id, day_of_week)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Destination Photos Table
+CREATE TABLE destination_photos (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    destination_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NULL,
+    photo_url VARCHAR(255) NOT NULL,
+    caption TEXT NULL,
+    is_primary BOOLEAN DEFAULT FALSE,
+    order_position INT DEFAULT 0,
+    likes_count INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (destination_id) REFERENCES destinations(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_destination (destination_id),
+    INDEX idx_user (user_id),
+    INDEX idx_primary (is_primary)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- CHECK-INS & VISITS TABLES
+-- ============================================================================
+
+-- Check-ins Table (User visits to destinations)
+CREATE TABLE check_ins (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    destination_id BIGINT UNSIGNED NOT NULL,
+    qr_code VARCHAR(255) NULL,
+    points_earned INT DEFAULT 0,
+    first_visit_bonus INT DEFAULT 0,
+    streak_bonus INT DEFAULT 0,
+    review_bonus INT DEFAULT 0,
+    photo_bonus INT DEFAULT 0,
+    total_bonus INT DEFAULT 0,
+    user_latitude DECIMAL(10, 8) NULL,
+    user_longitude DECIMAL(11, 8) NULL,
+    distance_meters INT NULL,
+    accuracy_meters INT NULL,
+    check_in_method ENUM('qr_scan', 'manual', 'auto') DEFAULT 'qr_scan',
+    verification_status ENUM('verified', 'pending', 'rejected', 'suspicious') DEFAULT 'verified',
+    ip_address VARCHAR(45) NULL,
+    user_agent TEXT NULL,
+    notes TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (destination_id) REFERENCES destinations(id) ON DELETE CASCADE,
+    INDEX idx_user (user_id),
+    INDEX idx_destination (destination_id),
+    INDEX idx_created_at (created_at),
+    INDEX idx_verification (verification_status),
+    UNIQUE KEY unique_daily_checkin (user_id, destination_id, DATE(created_at))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- BADGES & ACHIEVEMENTS TABLES (NORMALIZED)
+-- ============================================================================
+
+-- Badge Requirement Types Lookup Table
+CREATE TABLE badge_requirement_types (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    type_code VARCHAR(20) UNIQUE NOT NULL,
+    type_name VARCHAR(50) NOT NULL,
+    description TEXT NULL,
+    measurement_unit VARCHAR(20) NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Badges Table (NORMALIZED)
+CREATE TABLE badges (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    slug VARCHAR(255) UNIQUE NOT NULL,
+    description TEXT NULL,
+    icon VARCHAR(255) NULL,
+    icon_emoji VARCHAR(10) NULL,
+    tier_id TINYINT UNSIGNED NOT NULL,
+    points_reward INT DEFAULT 100,
+    requirement_type_id TINYINT UNSIGNED NOT NULL,
+    requirement_value INT NOT NULL,
+    order_position INT DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    is_hidden BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (tier_id) REFERENCES badge_tiers(id),
+    FOREIGN KEY (requirement_type_id) REFERENCES badge_requirement_types(id),
+    INDEX idx_requirement_type (requirement_type_id),
+    INDEX idx_tier (tier_id),
+    INDEX idx_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Badge Requirements Details (For complex requirements - 1:Many)
+CREATE TABLE badge_requirement_details (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    badge_id BIGINT UNSIGNED NOT NULL,
+    requirement_key VARCHAR(50) NOT NULL,
+    requirement_value VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    FOREIGN KEY (badge_id) REFERENCES badges(id) ON DELETE CASCADE,
+    INDEX idx_badge (badge_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- User Badges Table (Earned badges)
+CREATE TABLE user_badges (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    badge_id BIGINT UNSIGNED NOT NULL,
+    earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    progress INT DEFAULT 0,
+    requirement INT DEFAULT 0,
+    is_completed BOOLEAN DEFAULT FALSE,
+    notified BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (badge_id) REFERENCES badges(id) ON DELETE CASCADE,
+    INDEX idx_user (user_id),
+    INDEX idx_badge (badge_id),
+    INDEX idx_completed (is_completed),
+    UNIQUE KEY unique_user_badge (user_id, badge_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- REWARDS & REDEMPTIONS TABLES (NORMALIZED)
+-- ============================================================================
+
+-- Partners Table (Business partners offering rewards)
+CREATE TABLE partners (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    partner_name VARCHAR(255) NOT NULL,
+    partner_code VARCHAR(50) UNIQUE NOT NULL,
+    description TEXT NULL,
+    logo_url VARCHAR(255) NULL,
+    website VARCHAR(255) NULL,
+    contact_email VARCHAR(255) NULL,
+    contact_phone VARCHAR(20) NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_code (partner_code),
+    INDEX idx_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Partner Locations Table (Multiple locations per partner)
+CREATE TABLE partner_locations (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    partner_id INT UNSIGNED NOT NULL,
+    location_name VARCHAR(255) NOT NULL,
+    city_id INT UNSIGNED NULL,
+    address TEXT NULL,
+    latitude DECIMAL(10, 8) NULL,
+    longitude DECIMAL(11, 8) NULL,
+    contact_phone VARCHAR(20) NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE CASCADE,
+    FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE SET NULL,
+    INDEX idx_partner (partner_id),
+    INDEX idx_city (city_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Rewards Table (NORMALIZED)
+CREATE TABLE rewards (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    slug VARCHAR(255) UNIQUE NOT NULL,
+    description TEXT NULL,
+    full_description LONGTEXT NULL,
+    category_id TINYINT UNSIGNED NOT NULL,
+    partner_id INT UNSIGNED NULL,
+    points_cost INT NOT NULL,
+    stock_quantity INT DEFAULT 0,
+    unlimited_stock BOOLEAN DEFAULT FALSE,
+    expiry_days INT DEFAULT 30,
+    is_active BOOLEAN DEFAULT TRUE,
+    is_featured BOOLEAN DEFAULT FALSE,
+    featured_order INT NULL,
+    available_from DATE NULL,
+    available_until DATE NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL,
+    FOREIGN KEY (category_id) REFERENCES reward_categories(id),
+    FOREIGN KEY (partner_id) REFERENCES partners(id) ON DELETE SET NULL,
+    INDEX idx_category (category_id),
+    INDEX idx_partner (partner_id),
+    INDEX idx_points (points_cost),
+    INDEX idx_active (is_active),
+    INDEX idx_featured (is_featured),
+    FULLTEXT idx_search (name, description)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Reward Details Table (Extended info - 1:1)
+CREATE TABLE reward_details (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    reward_id BIGINT UNSIGNED UNIQUE NOT NULL,
+    primary_image_url VARCHAR(255) NULL,
+    terms_conditions TEXT NULL,
+    redemption_instructions TEXT NULL,
+    fine_print TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (reward_id) REFERENCES rewards(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Reward Images Table (Multiple images per reward)
+CREATE TABLE reward_images (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    reward_id BIGINT UNSIGNED NOT NULL,
+    image_url VARCHAR(255) NOT NULL,
+    caption VARCHAR(255) NULL,
+    is_primary BOOLEAN DEFAULT FALSE,
+    display_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (reward_id) REFERENCES rewards(id) ON DELETE CASCADE,
+    INDEX idx_reward (reward_id),
+    INDEX idx_primary (is_primary)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Reward Statistics Table
+CREATE TABLE reward_statistics (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    reward_id BIGINT UNSIGNED UNIQUE NOT NULL,
+    redeemed_count INT DEFAULT 0,
+    view_count INT DEFAULT 0,
+    favorite_count INT DEFAULT 0,
+    average_rating DECIMAL(3, 2) DEFAULT 0.00,
+    last_redeemed_at TIMESTAMP NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (reward_id) REFERENCES rewards(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Redemption Status Lookup Table
+CREATE TABLE redemption_statuses (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    status_code VARCHAR(20) UNIQUE NOT NULL,
+    status_name VARCHAR(50) NOT NULL,
+    description TEXT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Reward Redemptions Table (NORMALIZED)
+CREATE TABLE reward_redemptions (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    reward_id BIGINT UNSIGNED NOT NULL,
+    partner_location_id INT UNSIGNED NULL,
+    redemption_code VARCHAR(50) UNIQUE NOT NULL,
+    qr_code_url VARCHAR(255) NULL,
+    points_spent INT NOT NULL,
+    status_id TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    redeemed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (reward_id) REFERENCES rewards(id) ON DELETE CASCADE,
+    FOREIGN KEY (partner_location_id) REFERENCES partner_locations(id) ON DELETE SET NULL,
+    FOREIGN KEY (status_id) REFERENCES redemption_statuses(id),
+    INDEX idx_user (user_id),
+    INDEX idx_reward (reward_id),
+    INDEX idx_status (status_id),
+    INDEX idx_redemption_code (redemption_code),
+    INDEX idx_expires_at (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Redemption Verification Table (Partner verification records)
+CREATE TABLE redemption_verifications (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    redemption_id BIGINT UNSIGNED UNIQUE NOT NULL,
+    verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    verified_by_user VARCHAR(255) NULL,
+    verification_method ENUM('qr_scan', 'manual_code', 'system') DEFAULT 'qr_scan',
+    notes TEXT NULL,
+    FOREIGN KEY (redemption_id) REFERENCES reward_redemptions(id) ON DELETE CASCADE,
+    INDEX idx_redemption (redemption_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Redemption Feedback Table (User feedback after using reward)
+CREATE TABLE redemption_feedback (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    redemption_id BIGINT UNSIGNED UNIQUE NOT NULL,
+    rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    feedback_text TEXT NULL,
+    would_redeem_again BOOLEAN NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (redemption_id) REFERENCES reward_redemptions(id) ON DELETE CASCADE,
+    INDEX idx_redemption (redemption_id),
+    INDEX idx_rating (rating)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- REVIEWS & RATINGS TABLES
+-- ============================================================================
+
+-- Reviews Table (User reviews for destinations)
+CREATE TABLE reviews (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    destination_id BIGINT UNSIGNED NOT NULL,
+    rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    title VARCHAR(255) NULL,
+    comment TEXT NULL,
+    photos JSON NULL,
+    helpful_count INT DEFAULT 0,
+    not_helpful_count INT DEFAULT 0,
+    points_earned INT DEFAULT 20,
+    is_verified BOOLEAN DEFAULT FALSE,
+    is_featured BOOLEAN DEFAULT FALSE,
+    status ENUM('published', 'pending', 'rejected', 'hidden') DEFAULT 'published',
+    admin_reply TEXT NULL,
+    admin_replied_at TIMESTAMP NULL,
+    admin_replied_by BIGINT UNSIGNED NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (destination_id) REFERENCES destinations(id) ON DELETE CASCADE,
+    FOREIGN KEY (admin_replied_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_user (user_id),
+    INDEX idx_destination (destination_id),
+    INDEX idx_rating (rating),
+    INDEX idx_status (status),
+    INDEX idx_featured (is_featured),
+    UNIQUE KEY unique_user_destination_review (user_id, destination_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Review Helpfulness Table (Users marking reviews helpful)
+CREATE TABLE review_helpfulness (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    review_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+    is_helpful BOOLEAN NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_user_review_vote (review_id, user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- POINTS & TRANSACTIONS TABLES (NORMALIZED)
+-- ============================================================================
+
+-- Transaction Types Lookup Table
+CREATE TABLE transaction_types (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    type_code VARCHAR(20) UNIQUE NOT NULL,
+    type_name VARCHAR(50) NOT NULL,
+    affects_balance ENUM('add', 'subtract', 'none') NOT NULL,
+    description TEXT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Transaction Source Types Lookup Table
+CREATE TABLE transaction_source_types (
+    id TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    source_code VARCHAR(50) UNIQUE NOT NULL,
+    source_name VARCHAR(100) NOT NULL,
+    table_name VARCHAR(100) NULL,
+    description TEXT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Points Transactions Table (NORMALIZED)
+CREATE TABLE points_transactions (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    transaction_type_id TINYINT UNSIGNED NOT NULL,
+    points INT NOT NULL,
+    balance_after INT NOT NULL,
+    source_type_id TINYINT UNSIGNED NOT NULL,
+    source_id BIGINT UNSIGNED NULL,
+    description VARCHAR(255) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (transaction_type_id) REFERENCES transaction_types(id),
+    FOREIGN KEY (source_type_id) REFERENCES transaction_source_types(id),
+    INDEX idx_user (user_id),
+    INDEX idx_type (transaction_type_id),
+    INDEX idx_created_at (created_at),
+    INDEX idx_source (source_type_id, source_id),
+    INDEX idx_user_date (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Transaction Metadata Table (For additional transaction data)
+CREATE TABLE transaction_metadata (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    transaction_id BIGINT UNSIGNED NOT NULL,
+    meta_key VARCHAR(100) NOT NULL,
+    meta_value TEXT NULL,
+    FOREIGN KEY (transaction_id) REFERENCES points_transactions(id) ON DELETE CASCADE,
+    INDEX idx_transaction (transaction_id),
+    INDEX idx_key (meta_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- USER PREFERENCES & SETTINGS TABLES
+-- ============================================================================
+
+-- User Settings Table
+CREATE TABLE user_settings (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED UNIQUE NOT NULL,
+    email_notifications BOOLEAN DEFAULT TRUE,
+    push_notifications BOOLEAN DEFAULT TRUE,
+    sms_notifications BOOLEAN DEFAULT FALSE,
+    marketing_emails BOOLEAN DEFAULT TRUE,
+    profile_visibility ENUM('public', 'friends', 'private') DEFAULT 'public',
+    show_location BOOLEAN DEFAULT TRUE,
+    show_activity BOOLEAN DEFAULT TRUE,
+    show_badges BOOLEAN DEFAULT TRUE,
+    language VARCHAR(10) DEFAULT 'en',
+    distance_unit ENUM('km', 'miles') DEFAULT 'km',
+    temperature_unit ENUM('celsius', 'fahrenheit') DEFAULT 'celsius',
+    date_format VARCHAR(20) DEFAULT 'MM/DD/YYYY',
+    time_format ENUM('12hr', '24hr') DEFAULT '12hr',
+    theme ENUM('light', 'dark', 'auto') DEFAULT 'light',
+    map_view ENUM('satellite', 'street', 'terrain') DEFAULT 'street',
+    show_traffic BOOLEAN DEFAULT TRUE,
+    auto_center_map BOOLEAN DEFAULT TRUE,
+    marker_clustering BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- User Favorites Table (Saved destinations)
+CREATE TABLE user_favorites (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    destination_id BIGINT UNSIGNED NOT NULL,
+    notes TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (destination_id) REFERENCES destinations(id) ON DELETE CASCADE,
+    INDEX idx_user (user_id),
+    INDEX idx_destination (destination_id),
+    UNIQUE KEY unique_user_favorite (user_id, destination_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- SOCIAL & ACTIVITY TABLES
+-- ============================================================================
+
+-- User Friends Table (Friend connections)
+CREATE TABLE user_friends (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    friend_id BIGINT UNSIGNED NOT NULL,
+    status ENUM('pending', 'accepted', 'blocked') DEFAULT 'pending',
+    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    accepted_at TIMESTAMP NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (friend_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user (user_id),
+    INDEX idx_friend (friend_id),
+    INDEX idx_status (status),
+    UNIQUE KEY unique_friendship (user_id, friend_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Activity Feed Table (User activity timeline)
+CREATE TABLE activity_feed (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    activity_type ENUM('checkin', 'badge_earned', 'reward_redeemed', 'review', 'level_up', 'friend_added') NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    icon VARCHAR(50) NULL,
+    points INT DEFAULT 0,
+    related_type VARCHAR(100) NULL,
+    related_id BIGINT UNSIGNED NULL,
+    metadata JSON NULL,
+    is_public BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user (user_id),
+    INDEX idx_type (activity_type),
+    INDEX idx_created_at (created_at),
+    INDEX idx_public (is_public)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- NOTIFICATIONS TABLES
+-- ============================================================================
+
+-- Notifications Table
+CREATE TABLE notifications (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    type VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    icon VARCHAR(50) NULL,
+    action_url VARCHAR(255) NULL,
+    action_text VARCHAR(100) NULL,
+    priority ENUM('low', 'normal', 'high', 'urgent') DEFAULT 'normal',
+    is_read BOOLEAN DEFAULT FALSE,
+    read_at TIMESTAMP NULL,
+    metadata JSON NULL,
+    expires_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user (user_id),
+    INDEX idx_type (type),
+    INDEX idx_read (is_read),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- ANALYTICS & STATISTICS TABLES
+-- ============================================================================
+
+-- Daily Stats Table (System-wide daily statistics)
+CREATE TABLE daily_stats (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    date DATE UNIQUE NOT NULL,
+    total_users INT DEFAULT 0,
+    new_users INT DEFAULT 0,
+    active_users INT DEFAULT 0,
+    total_checkins INT DEFAULT 0,
+    total_points_earned INT DEFAULT 0,
+    total_rewards_redeemed INT DEFAULT 0,
+    total_reviews INT DEFAULT 0,
+    total_badges_earned INT DEFAULT 0,
+    metadata JSON NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_date (date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- User Analytics Table (Individual user analytics)
+CREATE TABLE user_analytics (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    date DATE NOT NULL,
+    checkins_count INT DEFAULT 0,
+    points_earned INT DEFAULT 0,
+    points_spent INT DEFAULT 0,
+    distance_traveled DECIMAL(10, 2) DEFAULT 0.00,
+    time_spent_minutes INT DEFAULT 0,
+    reviews_written INT DEFAULT 0,
+    photos_uploaded INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user_date (user_id, date),
+    UNIQUE KEY unique_user_date (user_id, date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- SYSTEM TABLES
+-- ============================================================================
+
+-- System Settings Table
+CREATE TABLE system_settings (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(100) UNIQUE NOT NULL,
+    setting_value TEXT NULL,
+    setting_type ENUM('string', 'number', 'boolean', 'json') DEFAULT 'string',
+    description TEXT NULL,
+    is_public BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_key (setting_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Audit Log Table (Track important actions)
+CREATE TABLE audit_logs (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NULL,
+    action VARCHAR(100) NOT NULL,
+    model_type VARCHAR(100) NULL,
+    model_id BIGINT UNSIGNED NULL,
+    old_values JSON NULL,
+    new_values JSON NULL,
+    ip_address VARCHAR(45) NULL,
+    user_agent TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_user (user_id),
+    INDEX idx_action (action),
+    INDEX idx_model (model_type, model_id),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================================
+-- SAMPLE DATA INSERTS (FOR NORMALIZED TABLES)
+-- ============================================================================
+
+-- Insert Lookup Table Data
+-- User Roles
+INSERT INTO user_roles (role_code, role_name, description) VALUES
+('user', 'Regular User', 'Standard user account'),
+('admin', 'Administrator', 'Full system access'),
+('moderator', 'Moderator', 'Content moderation access');
+
+-- User Statuses
+INSERT INTO user_statuses (status_code, status_name, description) VALUES
+('active', 'Active', 'Account is active'),
+('inactive', 'Inactive', 'Account is inactive'),
+('suspended', 'Suspended', 'Account temporarily suspended'),
+('banned', 'Banned', 'Account permanently banned');
+
+-- Destination Categories
+INSERT INTO destination_categories (category_code, category_name, icon, color) VALUES
+('hotel', 'Hotel', '🏨', 'blue'),
+('agri_farm', 'Agricultural Farm', '🌾', 'green'),
+('tourist_spot', 'Tourist Spot', '⛰️', 'purple'),
+('restaurant', 'Restaurant', '🍽️', 'orange'),
+('attraction', 'Attraction', '🎡', 'pink');
+
+-- Reward Categories
+INSERT INTO reward_categories (category_code, category_name, icon) VALUES
+('merchandise', 'Merchandise', '👕'),
+('food', 'Food & Dining', '🍔'),
+('travel', 'Travel', '✈️'),
+('wellness', 'Wellness', '🧘'),
+('voucher', 'Voucher', '🎫'),
+('discount', 'Discount', '💰');
+
+-- Badge Tiers
+INSERT INTO badge_tiers (tier_code, tier_name, color, min_points, display_order) VALUES
+('bronze', 'Bronze', '#CD7F32', 0, 1),
+('silver', 'Silver', '#C0C0C0', 100, 2),
+('gold', 'Gold', '#FFD700', 250, 3),
+('platinum', 'Platinum', '#E5E4E2', 500, 4),
+('diamond', 'Diamond', '#B9F2FF', 1000, 5);
+
+-- Badge Requirement Types
+INSERT INTO badge_requirement_types (type_code, type_name, measurement_unit) VALUES
+('visits', 'Number of Visits', 'visits'),
+('points', 'Total Points', 'points'),
+('reviews', 'Number of Reviews', 'reviews'),
+('streak', 'Consecutive Days', 'days'),
+('distance', 'Distance Traveled', 'kilometers'),
+('custom', 'Custom Requirement', NULL);
+
+-- Transaction Types
+INSERT INTO transaction_types (type_code, type_name, affects_balance) VALUES
+('earned', 'Points Earned', 'add'),
+('spent', 'Points Spent', 'subtract'),
+('bonus', 'Bonus Points', 'add'),
+('refund', 'Points Refunded', 'add'),
+('penalty', 'Penalty Deduction', 'subtract'),
+('adjustment', 'Manual Adjustment', 'none');
+
+-- Transaction Source Types
+INSERT INTO transaction_source_types (source_code, source_name, table_name) VALUES
+('check_in', 'Check-In', 'check_ins'),
+('badge', 'Badge Award', 'user_badges'),
+('reward', 'Reward Redemption', 'reward_redemptions'),
+('review', 'Review', 'reviews'),
+('referral', 'Referral', 'user_referrals'),
+('admin', 'Admin Adjustment', NULL);
+
+-- Destination Statuses
+INSERT INTO destination_statuses (status_code, status_name) VALUES
+('active', 'Active'),
+('inactive', 'Inactive'),
+('pending', 'Pending Approval'),
+('closed', 'Permanently Closed');
+
+-- Redemption Statuses
+INSERT INTO redemption_statuses (status_code, status_name) VALUES
+('pending', 'Pending'),
+('approved', 'Approved'),
+('used', 'Used'),
+('expired', 'Expired'),
+('cancelled', 'Cancelled');
+
+-- Admin Roles
+INSERT INTO admin_roles (role_code, role_name, level) VALUES
+('administrator', 'Administrator', 3),
+('moderator', 'Moderator', 2),
+('support', 'Support', 1);
+
+-- Admin Permissions
+INSERT INTO admin_permissions (permission_code, permission_name, module) VALUES
+('manage_users', 'Manage Users', 'Users'),
+('manage_destinations', 'Manage Destinations', 'Destinations'),
+('manage_badges', 'Manage Badges', 'Badges'),
+('manage_rewards', 'Manage Rewards', 'Rewards'),
+('view_analytics', 'View Analytics', 'Analytics'),
+('manage_settings', 'Manage System Settings', 'Settings'),
+('moderate_content', 'Moderate User Content', 'Moderation'),
+('manage_admins', 'Manage Admin Accounts', 'Administration');
+
+-- Countries
+INSERT INTO countries (country_code, country_name, phone_code, currency_code) VALUES
+('PH', 'Philippines', '+63', 'PHP'),
+('US', 'United States', '+1', 'USD');
+
+-- Regions (Philippines)
+INSERT INTO regions (country_id, region_code, region_name) VALUES
+(1, 'NCR', 'National Capital Region'),
+(1, 'CAR', 'Cordillera Administrative Region'),
+(1, 'MIMAROPA', 'Mimaropa Region'),
+(1, 'REGION4A', 'Calabarzon');
+
+-- Sample Cities
+INSERT INTO cities (region_id, city_name, latitude, longitude) VALUES
+(1, 'Manila', 14.5995, 120.9842),
+(1, 'Quezon City', 14.6760, 121.0437),
+(3, 'Puerto Galera', 13.5000, 120.9500),
+(3, 'Calapan', 13.4119, 121.1803);
+
+-- Amenities
+INSERT INTO amenities (amenity_code, amenity_name, icon, category) VALUES
+('wifi', 'Free WiFi', '📶', 'connectivity'),
+('parking', 'Parking', '🅿️', 'facilities'),
+('pool', 'Swimming Pool', '🏊', 'recreation'),
+('restaurant', 'Restaurant', '🍽️', 'dining'),
+('gym', 'Fitness Center', '🏋️', 'recreation'),
+('spa', 'Spa Services', '💆', 'wellness'),
+('ac', 'Air Conditioning', '❄️', 'comfort'),
+('pet_friendly', 'Pet Friendly', '🐕', 'policy');
+
+-- Insert Sample Admin User
+INSERT INTO users (email, password, role_id, status_id) VALUES
+('admin@travelquest.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 2, 1);
+
+INSERT INTO user_profiles (user_id, first_name, last_name, display_name) VALUES
+(1, 'Admin', 'User', 'Admin');
+
+INSERT INTO user_statistics (user_id, points, level) VALUES
+(1, 0, 1);
+
+-- Insert Sample Regular User
+INSERT INTO users (email, password, role_id, status_id) VALUES
+('alex@example.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 1, 1);
+
+INSERT INTO user_profiles (user_id, first_name, last_name, display_name) VALUES
+(2, 'Alex', 'Thompson', 'Alex Thompson');
+
+INSERT INTO user_statistics (user_id, points, total_visits, level) VALUES
+(2, 2450, 12, 3);
+
+-- Insert Sample Partner
+INSERT INTO partners (partner_name, partner_code, description) VALUES
+('Grand Hotels Group', 'GHG', 'Leading hotel chain in the Philippines');
+
+INSERT INTO partner_locations (partner_id, location_name, city_id, address) VALUES
+(1, 'Grand Hotel Resort Manila', 1, '123 Main Street, Manila');
+
+-- Insert Sample Destinations
+INSERT INTO destinations (name, slug, category_id, description, city_id, latitude, longitude, points_reward, status_id, created_by) VALUES
+('Grand Hotel Resort', 'grand-hotel-resort', 1, 'Luxury resort with excellent amenities and service', 1, 14.5995, 120.9842, 50, 1, 1),
+('Organic Farm Experience', 'organic-farm-experience', 2, 'Fresh organic produce and farm tours', 2, 14.6095, 120.9942, 30, 1, 1),
+('Mountain Peak Viewpoint', 'mountain-peak-viewpoint', 3, 'Scenic mountain views and hiking trails', 3, 14.6195, 121.0042, 100, 1, 1);
+
+INSERT INTO destination_statistics (destination_id, rating) VALUES
+(1, 4.8), (2, 4.5), (3, 4.9);
+
+-- Insert Sample Badges
+INSERT INTO badges (name, slug, description, icon_emoji, tier_id, points_reward, requirement_type_id, requirement_value) VALUES
+('Explorer', 'explorer', 'Visit 5 destinations', '🗺️', 1, 100, 1, 5),
+('Adventurer', 'adventurer', 'Visit 10 destinations', '⛰️', 2, 250, 1, 10),
+('Master Traveler', 'master-traveler', 'Visit 25 destinations', '🌟', 3, 500, 1, 25),
+('Reviewer', 'reviewer', 'Leave 10 reviews', '⭐', 1, 150, 3, 10),
+('Point Master', 'point-master', 'Earn 5000 points', '💰', 2, 300, 2, 5000);
+
+-- Insert Sample Rewards
+INSERT INTO rewards (name, slug, description, category_id, partner_id, points_cost, stock_quantity, is_active) VALUES
+('TravelQuest T-Shirt', 'travelquest-tshirt', 'Premium cotton tee with logo', 1, NULL, 200, 50, TRUE),
+('Restaurant Voucher $20', 'restaurant-voucher-20', 'Valid at 50+ partner restaurants', 2, 1, 500, 100, TRUE),
+('Hotel Discount 15%', 'hotel-discount-15', '15% off at partner hotels', 3, 1, 800, 30, TRUE),
+('Spa Treatment Package', 'spa-treatment-package', 'Full spa treatment at partner spas', 4, 1, 1000, 20, TRUE);
+
+INSERT INTO reward_statistics (reward_id) VALUES (1), (2), (3), (4);
+
+-- Insert System Settings
+INSERT INTO system_settings (setting_key, setting_value, setting_type, description, is_public) VALUES
+('app_name', 'TravelQuest', 'string', 'Application name', TRUE),
+('points_per_checkin', '50', 'number', 'Base points per check-in', FALSE),
+('first_visit_bonus', '25', 'number', 'Bonus points for first visit', FALSE),
+('review_points', '20', 'number', 'Points for writing a review', FALSE),
+('streak_multiplier', '10', 'number', 'Points multiplier per streak day', FALSE),
+('max_checkins_per_day', '10', 'number', 'Maximum check-ins per day per user', FALSE),
+('reward_expiry_days', '30', 'number', 'Default reward expiry in days', FALSE),
+('verification_distance_meters', '100', 'number', 'Maximum distance for check-in verification', FALSE);
+
+
+-- ============================================================================
+-- INDEXES FOR PERFORMANCE
+-- ============================================================================
+
+-- Additional composite indexes for common queries
+CREATE INDEX idx_checkins_user_date ON check_ins(user_id, created_at);
+CREATE INDEX idx_checkins_destination_date ON check_ins(destination_id, created_at);
+CREATE INDEX idx_reviews_destination_rating ON reviews(destination_id, rating);
+CREATE INDEX idx_transactions_user_date ON points_transactions(user_id, created_at);
+CREATE INDEX idx_destinations_category_status ON destinations(category, status);
+CREATE INDEX idx_rewards_category_active ON rewards(category, is_active);
+CREATE INDEX idx_user_badges_completed ON user_badges(user_id, is_completed);
+
+
+-- ============================================================================
+-- VIEWS FOR COMMON QUERIES
+-- ============================================================================
+
+-- View: User Statistics Summary
+CREATE VIEW user_stats_summary AS
+SELECT 
+    u.id,
+    u.name,
+    u.email,
+    u.points,
+    u.level,
+    u.total_visits,
+    u.total_reviews,
+    u.rewards_redeemed,
+    u.badges_earned,
+    u.current_streak,
+    u.best_streak,
+    COUNT(DISTINCT c.id) as lifetime_checkins,
+    COUNT(DISTINCT r.id) as lifetime_reviews,
+    COUNT(DISTINCT ub.id) as lifetime_badges,
+    COUNT(DISTINCT rr.id) as lifetime_redemptions,
+    SUM(pt.points) as lifetime_points_earned
+FROM users u
+LEFT JOIN check_ins c ON u.id = c.user_id
+LEFT JOIN reviews r ON u.id = r.user_id
+LEFT JOIN user_badges ub ON u.id = ub.user_id AND ub.is_completed = TRUE
+LEFT JOIN reward_redemptions rr ON u.id = rr.user_id
+LEFT JOIN points_transactions pt ON u.id = pt.user_id AND pt.transaction_type = 'earned'
+GROUP BY u.id;
+
+-- View: Destination Statistics
+CREATE VIEW destination_stats AS
+SELECT 
+    d.id,
+    d.name,
+    d.category,
+    d.points_reward,
+    d.rating,
+    d.review_count,
+    d.visit_count,
+    COUNT(DISTINCT c.user_id) as unique_visitors,
+    AVG(r.rating) as avg_rating,
+    COUNT(DISTINCT r.id) as total_reviews
+FROM destinations d
+LEFT JOIN check_ins c ON d.id = c.destination_id
+LEFT JOIN reviews r ON d.id = r.destination_id
+GROUP BY d.id;
+
+-- View: Leaderboard
+CREATE VIEW user_leaderboard AS
+SELECT 
+    u.id,
+    u.name,
+    u.avatar,
+    u.points,
+    u.level,
+    u.total_visits,
+    u.badges_earned,
+    RANK() OVER (ORDER BY u.points DESC) as points_rank,
+    RANK() OVER (ORDER BY u.total_visits DESC) as visits_rank,
+    RANK() OVER (ORDER BY u.badges_earned DESC) as badges_rank
+FROM users u
+WHERE u.status = 'active'
+ORDER BY u.points DESC;
+
+
+-- ============================================================================
+-- TRIGGERS FOR AUTOMATION
+-- ============================================================================
+
+-- Trigger: Update destination rating after new review
+DELIMITER $$
+CREATE TRIGGER update_destination_rating_after_review
+AFTER INSERT ON reviews
+FOR EACH ROW
+BEGIN
+    UPDATE destinations
+    SET rating = (
+        SELECT AVG(rating)
+        FROM reviews
+        WHERE destination_id = NEW.destination_id
+        AND status = 'published'
+    ),
+    review_count = (
+        SELECT COUNT(*)
+        FROM reviews
+        WHERE destination_id = NEW.destination_id
+        AND status = 'published'
+    )
+    WHERE id = NEW.destination_id;
+END$$
+DELIMITER ;
+
+-- Trigger: Create points transaction on check-in
+DELIMITER $$
+CREATE TRIGGER create_points_transaction_on_checkin
+AFTER INSERT ON check_ins
+FOR EACH ROW
+BEGIN
+    INSERT INTO points_transactions (user_id, transaction_type, points, balance_after, source_type, source_id, description)
+    VALUES (
+        NEW.user_id,
+        'earned',
+        NEW.points_earned,
+        (SELECT points FROM users WHERE id = NEW.user_id),
+        'check_in',
+        NEW.id,
+        CONCAT('Check-in at destination ID: ', NEW.destination_id)
+    );
+END$$
+DELIMITER ;
+
+-- Trigger: Update user points on transaction
+DELIMITER $$
+CREATE TRIGGER update_user_points_on_transaction
+AFTER INSERT ON points_transactions
+FOR EACH ROW
+BEGIN
+    IF NEW.transaction_type IN ('earned', 'bonus', 'refund') THEN
+        UPDATE users
+        SET points = points + NEW.points
+        WHERE id = NEW.user_id;
+    ELSEIF NEW.transaction_type IN ('spent', 'penalty') THEN
+        UPDATE users
+        SET points = points - NEW.points
+        WHERE id = NEW.user_id;
+    END IF;
+END$$
+DELIMITER ;
+
+
+-- ============================================================================
+-- STORED PROCEDURES
+-- ============================================================================
+
+-- Procedure: Award Badge to User
+DELIMITER $$
+CREATE PROCEDURE award_badge_to_user(
+    IN p_user_id BIGINT,
+    IN p_badge_id BIGINT
+)
+BEGIN
+    DECLARE badge_points INT;
+    
+    -- Get badge points
+    SELECT points_reward INTO badge_points
+    FROM badges
+    WHERE id = p_badge_id;
+    
+    -- Award badge
+    INSERT INTO user_badges (user_id, badge_id, is_completed, earned_at)
+    VALUES (p_user_id, p_badge_id, TRUE, NOW())
+    ON DUPLICATE KEY UPDATE is_completed = TRUE, earned_at = NOW();
+    
+    -- Update user badge count
+    UPDATE users
+    SET badges_earned = (
+        SELECT COUNT(*) FROM user_badges
+        WHERE user_id = p_user_id AND is_completed = TRUE
+    )
+    WHERE id = p_user_id;
+    
+    -- Award points
+    INSERT INTO points_transactions (user_id, transaction_type, points, balance_after, source_type, source_id, description)
+    VALUES (
+        p_user_id,
+        'bonus',
+        badge_points,
+        (SELECT points FROM users WHERE id = p_user_id),
+        'badge',
+        p_badge_id,
+        'Badge earned'
+    );
+    
+    -- Create notification
+    INSERT INTO notifications (user_id, type, title, message, icon, priority)
+    VALUES (
+        p_user_id,
+        'badge_earned',
+        'New Badge Earned!',
+        CONCAT('You earned the badge: ', (SELECT name FROM badges WHERE id = p_badge_id)),
+        '🏆',
+        'high'
+    );
+END$$
+DELIMITER ;
+
+-- Procedure: Check and Award Badges
+DELIMITER $$
+CREATE PROCEDURE check_and_award_badges(IN p_user_id BIGINT)
+BEGIN
+    DECLARE done INT DEFAULT FALSE;
+    DECLARE v_badge_id BIGINT;
+    DECLARE v_requirement_type VARCHAR(50);
+    DECLARE v_requirement_value INT;
+    DECLARE v_user_progress INT;
+    
+    DECLARE badge_cursor CURSOR FOR
+        SELECT id, requirement_type, requirement_value
+        FROM badges
+        WHERE is_active = TRUE
+        AND id NOT IN (
+            SELECT badge_id FROM user_badges
+            WHERE user_id = p_user_id AND is_completed = TRUE
+        );
+    
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+    
+    OPEN badge_cursor;
+    
+    read_loop: LOOP
+        FETCH badge_cursor INTO v_badge_id, v_requirement_type, v_requirement_value;
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+        
+        -- Check requirement based on type
+        IF v_requirement_type = 'visits' THEN
+            SELECT total_visits INTO v_user_progress FROM users WHERE id = p_user_id;
+        ELSEIF v_requirement_type = 'points' THEN
+            SELECT points INTO v_user_progress FROM users WHERE id = p_user_id;
+        ELSEIF v_requirement_type = 'reviews' THEN
+            SELECT total_reviews INTO v_user_progress FROM users WHERE id = p_user_id;
+        END IF;
+        
+        -- Award badge if requirement met
+        IF v_user_progress >= v_requirement_value THEN
+            CALL award_badge_to_user(p_user_id, v_badge_id);
+        END IF;
+    END LOOP;
+    
+    CLOSE badge_cursor;
+END$$
+DELIMITER ;
+
+
+-- ============================================================================
+-- END OF DATABASE SCHEMA
+-- ============================================================================

@@ -1,0 +1,1820 @@
+================================================================================
+                    TRAVELQUEST SYSTEM DATABASE
+              Complete Technical Documentation & Explanation
+================================================================================
+
+PROJECT OVERVIEW
+================================================================================
+TravelQuest is a location-based gamification platform where users explore
+destinations, earn points, collect badges, and redeem rewards. The system
+includes an admin panel for managing destinations, badges, and rewards.
+
+TECH STACK:
+- Frontend: React 19.1.1 with Vite
+- Routing: React Router v6
+- Animations: Framer Motion
+- Styling: Tailwind CSS
+- Backend: Laravel (API-ready, in development)
+- State Management: React Context API
+- Notifications: React Hot Toast
+
+
+================================================================================
+                        ARCHITECTURE OVERVIEW
+================================================================================
+
+PROJECT STRUCTURE:
+react-frontend/
+├── src/
+│   ├── App.jsx                    # Main app with routing
+│   ├── App.css                    # Global styles
+│   ├── main.jsx                   # Entry point
+│   ├── contexts/                  # Global state management
+│   │   ├── AuthContext.jsx        # User authentication state
+│   │   └── LocationContext.jsx    # Geolocation tracking
+│   ├── services/
+│   │   └── api.js                 # API communication layer
+│   ├── utils/
+│   │   └── animations.js          # Framer Motion variants
+│   ├── components/
+│   │   ├── auth/                  # Login/Register components
+│   │   ├── common/                # Reusable UI components
+│   │   ├── dashboard/             # Admin dashboard components
+│   │   ├── user/                  # User-specific components
+│   │   ├── map/                   # Map exploration components
+│   │   └── qr/                    # QR scanner components
+│   └── pages/
+│       ├── admin/                 # Admin pages
+│       │   ├── Dashboard.jsx
+│       │   ├── Destinations.jsx
+│       │   ├── Badges.jsx
+│       │   ├── Rewards.jsx
+│       │   ├── AdminMap.jsx
+│       │   └── Settings.jsx
+│       └── user/                  # User pages
+│           ├── MapExplorer.jsx
+│           ├── UserDashboard.jsx
+│           ├── CheckIn.jsx
+│           ├── Rewards.jsx
+│           └── UserSettings.jsx
+
+
+================================================================================
+                        ROUTING SYSTEM
+================================================================================
+
+ROUTE STRUCTURE:
+The app uses a prefix-based routing system for clear separation:
+
+PUBLIC ROUTES:
+- /login                    → User login page
+- /admin/login              → Admin login page  
+- /register                 → User registration page
+- /                         → Redirects to /user/map
+
+USER ROUTES (Prefix: /user/):
+- /user/map                 → MapExplorer: Browse destinations on map
+- /user/dashboard           → UserDashboard: View profile & stats
+- /user/checkin             → CheckIn: QR code scanning for check-ins
+- /user/rewards             → Rewards: Browse and redeem rewards
+- /user/settings            → UserSettings: Account settings
+
+ADMIN ROUTES (Prefix: /admin/):
+- /admin/dashboard          → Dashboard: Overview statistics
+- /admin/destinations       → Destinations: Manage destinations
+- /admin/badges             → Badges: Manage badge system
+- /admin/rewards            → Rewards: Manage reward catalog
+- /admin/map                → AdminMap: View destinations on map
+- /admin/settings           → Settings: Admin account settings
+
+LEGACY REDIRECTS (Backward Compatibility):
+- /map → /user/map
+- /dashboard → /user/dashboard
+- /checkin → /user/checkin
+- /rewards → /user/rewards
+
+HOW ROUTING WORKS:
+1. App.jsx wraps routes with AnimatePresence for smooth transitions
+2. useLocation() hook tracks current route for key-based animations
+3. mode="wait" ensures old page exits before new page enters
+4. Each route change triggers page-level animations
+
+
+================================================================================
+                    CONTEXT API SYSTEM
+================================================================================
+
+1. AUTH CONTEXT (AuthContext.jsx)
+================================================================================
+PURPOSE: Manages user authentication state globally
+
+STATE VARIABLES:
+- user: Current user object (name, email, role, etc.)
+- loading: Boolean for initial auth check
+- isAuthenticated: Boolean for auth status
+
+FUNCTIONS:
+- login(credentials): Authenticates user with API
+  * Stores auth token in localStorage
+  * Sets user state
+  * Returns {success: true/false, user/error}
+
+- register(userData): Creates new user account
+  * Calls API registration endpoint
+  * Auto-logs in after successful registration
+
+- logout(): Clears user session
+  * Removes token from localStorage
+  * Resets user state
+  * Redirects to login
+
+- checkAuth(): Runs on app mount
+  * Checks for existing token
+  * Fetches user data if token exists
+  * Sets authenticated state
+
+USAGE:
+  const { user, login, logout, isAuthenticated } = useAuth();
+
+
+2. LOCATION CONTEXT (LocationContext.jsx)
+================================================================================
+PURPOSE: Handles geolocation tracking for proximity features
+
+STATE VARIABLES:
+- userLocation: {latitude, longitude, accuracy}
+- locationError: Error message if tracking fails
+- isTracking: Boolean for tracking status
+- watchId: ID for geolocation watch session
+
+FUNCTIONS:
+- startTracking(): Initiates continuous location tracking
+  * Uses navigator.geolocation.watchPosition()
+  * Updates location in real-time
+  * Handles permission errors
+
+- stopTracking(): Stops location tracking
+  * Clears watch session
+  * Called on component unmount
+
+- calculateDistance(lat1, lon1, lat2, lon2): Haversine formula
+  * Returns distance in kilometers
+  * Used for nearby destination detection
+
+- getNearbyDestinations(destinations, radius): Filters destinations
+  * Returns destinations within specified radius
+  * Uses calculateDistance() for each destination
+
+USAGE:
+  const { userLocation, getNearbyDestinations } = useLocation();
+
+
+================================================================================
+                        API SERVICE LAYER
+================================================================================
+
+FILE: services/api.js
+
+PURPOSE: Centralized API communication with Laravel backend
+
+CONFIGURATION:
+- Base URL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+- Token storage: localStorage.getItem('auth_token')
+- Headers: JSON content-type + Bearer token authorization
+
+CORE METHODS:
+
+1. request(endpoint, options)
+   - Base method for all API calls
+   - Handles authentication headers
+   - Error handling and logging
+   - Returns parsed JSON response
+
+2. AUTHENTICATION ENDPOINTS:
+   - login(credentials) → POST /api/login
+   - register(userData) → POST /api/register
+   - logout() → POST /api/logout
+   - getCurrentUser() → GET /api/user
+
+3. DESTINATION ENDPOINTS:
+   - getDestinations(params) → GET /api/destinations
+   - getDestinationById(id) → GET /api/destinations/{id}
+   - createDestination(data) → POST /api/destinations
+   - updateDestination(id, data) → PUT /api/destinations/{id}
+   - deleteDestination(id) → DELETE /api/destinations/{id}
+
+4. CHECK-IN ENDPOINTS:
+   - checkIn(destinationId, qrCode) → POST /api/checkins
+   - getCheckInHistory() → GET /api/checkins
+   - getUserCheckIns() → GET /api/user/checkins
+
+5. BADGE ENDPOINTS:
+   - getBadges() → GET /api/badges
+   - getUserBadges() → GET /api/user/badges
+   - createBadge(data) → POST /api/badges
+   - updateBadge(id, data) → PUT /api/badges/{id}
+   - deleteBadge(id) → DELETE /api/badges/{id}
+
+6. REWARD ENDPOINTS:
+   - getRewards() → GET /api/rewards
+   - redeemReward(rewardId) → POST /api/rewards/redeem
+   - getUserRewards() → GET /api/user/rewards
+   - createReward(data) → POST /api/rewards
+   - updateReward(id, data) → PUT /api/rewards/{id}
+   - deleteReward(id) → DELETE /api/rewards/{id}
+
+7. STATS ENDPOINTS:
+   - getAdminStats() → GET /api/admin/stats
+   - getUserStats() → GET /api/user/stats
+
+TOKEN MANAGEMENT:
+- setToken(token): Stores token in localStorage and instance
+- getHeaders(): Returns authorization headers with Bearer token
+- Token automatically included in all authenticated requests
+
+
+================================================================================
+                    ANIMATION SYSTEM
+================================================================================
+
+FILE: utils/animations.js
+
+PURPOSE: Centralized Framer Motion animation variants for consistency
+
+ANIMATION STRATEGY:
+- High initial opacity (0.95-0.98) prevents black flash
+- Short durations (0.15-0.2s) for snappy feel
+- Easing functions for natural motion
+- Staggered animations for sequential reveals
+
+AVAILABLE VARIANTS:
+
+1. fadeIn
+   - hidden: opacity 0.95
+   - visible: opacity 1 (0.15s)
+   - exit: opacity 0.95 (0.1s)
+   USE CASE: Subtle content reveals
+
+2. slideInFromRight
+   - hidden: {opacity: 0.95, x: 20}
+   - visible: {opacity: 1, x: 0} (0.2s)
+   USE CASE: Sidebar content, cards from right
+
+3. slideInFromLeft
+   - hidden: {opacity: 0.95, x: -20}
+   - visible: {opacity: 1, x: 0} (0.2s)
+   USE CASE: Content panels, lists
+
+4. slideInFromBottom
+   - hidden: {opacity: 0.95, y: 20}
+   - visible: {opacity: 1, y: 0} (0.2s)
+   USE CASE: Modal entry, bottom sheets
+
+5. staggerContainer
+   - hidden: opacity 1
+   - visible: opacity 1, staggerChildren: 0.08s, delayChildren: 0.05s
+   USE CASE: Wrap around multiple animated children
+
+6. scaleIn
+   - hidden: {scale: 0.95, opacity: 0.95}
+   - visible: {scale: 1, opacity: 1} (0.2s spring)
+   USE CASE: Cards, important elements
+
+7. modalVariants
+   - hidden: {scale: 0.98, y: 10, opacity: 0}
+   - visible: {scale: 1, y: 0, opacity: 1} (0.2s)
+   USE CASE: Modal dialogs, popups
+
+8. tabSlide
+   - hidden: {x: ±50, opacity: 0.95}
+   - visible: {x: 0, opacity: 1} (0.2s)
+   USE CASE: Tab content switching
+
+USAGE EXAMPLE:
+  <motion.div
+    variants={slideInFromRight}
+    initial="hidden"
+    animate="visible"
+  >
+    Content here
+  </motion.div>
+
+
+================================================================================
+                      ADMIN PAGES EXPLAINED
+================================================================================
+
+1. ADMIN DASHBOARD (Dashboard.jsx)
+================================================================================
+PURPOSE: Overview of system statistics and recent activity
+
+COMPONENTS USED:
+- AnimatedPage: Page-level animation wrapper
+- DashboardTabs: Navigation tabs (Overview, Destinations, Badges, etc.)
+- StatCard: Individual stat display cards
+- VisitsPointsTrend: Line chart for trends
+- MonthlyDistribution: Bar chart for monthly data
+- QuickStats: Additional statistics sidebar
+
+KEY FEATURES:
+- 4 stat cards showing: Total Users, Check-ins, Points Earned, Active Badges
+- Animated entry with stagger effect (cards appear sequentially)
+- Recent activity feed showing latest user actions
+- Responsive grid layout (1 col mobile, 2 cols tablet, 4 cols desktop)
+
+DATA DISPLAYED:
+- Total Users: 2,345 (+12% from last month)
+- Check-ins: 8,432 (+18% from last month)
+- Points Earned: 45,780 (+15% from last month)
+- Active Badges: 24 (No change from last month)
+
+HOW IT WORKS:
+1. Page loads with AnimatedPage wrapper
+2. StatCards animate in with slideInFromRight variant
+3. Stagger container delays each card by 0.08s
+4. Charts and activity feed load after stats
+
+
+2. DESTINATIONS MANAGEMENT (Destinations.jsx)
+================================================================================
+PURPOSE: CRUD operations for tourist destinations
+
+STATE MANAGEMENT:
+- modalState: {isOpen, mode, data}
+  * mode: 'view' | 'edit' | 'add' | 'delete'
+  * data: Selected destination object
+
+DESTINATION OBJECT STRUCTURE:
+{
+  id: 1,
+  title: 'Grand Hotel Resort',
+  category: 'hotel' | 'agri farm' | 'tourist spot',
+  categoryColor: 'bg-blue-100 text-blue-700',
+  categoryIcon: '🏨',
+  description: 'Luxury resort...',
+  points: 50,
+  location: 'Downtown',
+  rating: 4.8,
+  latitude: 14.5995,
+  longitude: 120.9842
+}
+
+MODAL OPERATIONS:
+
+VIEW MODE:
+- Displays destination details in read-only format
+- Shows: Title, Category, Description, Points, Location, Rating
+- "Edit" and "Delete" buttons available
+
+ADD/EDIT MODE:
+- Form inputs for all destination fields:
+  * Title (text input)
+  * Category (select dropdown)
+  * Description (textarea)
+  * Points (number input)
+  * Location (text input)
+  * Coordinates (lat/lng inputs)
+- "Save" button triggers handleSave()
+- Validates required fields
+
+DELETE MODE:
+- Confirmation dialog
+- Shows destination name
+- "Cancel" and "Delete" buttons
+- confirmDelete() removes destination
+
+WORKFLOW:
+1. Admin clicks "Add Destination" → Opens modal in 'add' mode
+2. Admin fills form → Clicks "Save"
+3. handleSave() calls API → Shows success toast
+4. Modal closes → Destination list refreshes
+5. Same flow for edit/delete operations
+
+DATA PERSISTENCE:
+- Currently uses localStorage for demo
+- localStorage key: 'travelquest_destinations'
+- Ready for API integration (api.createDestination(), etc.)
+
+
+3. BADGES MANAGEMENT (Badges.jsx)
+================================================================================
+PURPOSE: Manage achievement badges for users
+
+BADGE OBJECT STRUCTURE:
+{
+  id: 1,
+  title: 'Explorer',
+  description: 'Visit 5 destinations',
+  icon: '🗺️',
+  points: 100,
+  color: 'bg-blue-500',
+  requirement: 5,
+  type: 'visits' | 'reviews' | 'points'
+}
+
+PRE-DEFINED BADGES:
+1. Explorer - Visit 5 destinations (100 pts)
+2. Adventurer - Visit 10 destinations (250 pts)
+3. Master Traveler - Visit 25 destinations (500 pts)
+
+BADGE CARD FEATURES:
+- Gradient background based on badge color
+- Large emoji icon display
+- Title and description
+- Points value
+- "View", "Edit", "Delete" action buttons
+
+MODAL FORMS:
+
+ADD/EDIT BADGE FORM:
+- Badge Name (text input)
+- Description (textarea)
+- Icon (emoji selector or text input)
+- Points Value (number input)
+- Color Theme (color picker or preset)
+- Requirement (number input)
+- Type (dropdown: visits/reviews/points)
+
+BADGE AWARD LOGIC (Future Implementation):
+- Auto-awarded when user meets requirement
+- Triggers notification toast
+- Updates user badge collection
+- Awards points automatically
+
+USAGE IN USER SIDE:
+- Displayed in UserDashboard badge section
+- Shows earned vs locked badges
+- Grayed out if not yet earned
+- Unlocks when requirement met
+
+
+4. REWARDS MANAGEMENT (Admin Rewards.jsx)
+================================================================================
+PURPOSE: Manage redeemable rewards catalog
+
+REWARD OBJECT STRUCTURE:
+{
+  id: 1,
+  name: 'Travel Mug',
+  description: 'Insulated stainless steel travel mug',
+  points: 50,
+  category: 'merchandise' | 'food' | 'travel' | 'wellness',
+  image: '☕',
+  stock: 25,
+  available: true
+}
+
+REWARD CATEGORIES:
+- Merchandise: Branded items (mugs, t-shirts, bags)
+- Food & Dining: Restaurant vouchers, meal discounts
+- Travel: Hotel vouchers, tour packages
+- Wellness: Spa treatments, gym passes
+
+ADMIN OPERATIONS:
+
+ADD REWARD:
+- Name and description
+- Points cost
+- Category selection
+- Stock quantity
+- Availability toggle
+- Image/emoji selector
+
+EDIT REWARD:
+- Update any reward field
+- Adjust points cost
+- Manage stock levels
+- Enable/disable availability
+
+DELETE REWARD:
+- Confirmation required
+- Removes from catalog
+- Checks if users have redeemed (warning)
+
+STOCK MANAGEMENT:
+- Tracks remaining quantity
+- Shows "Out of Stock" when quantity = 0
+- Auto-disables when stock depleted
+- Can replenish stock via edit
+
+REDEMPTION TRACKING:
+- Logs which users redeemed what
+- Decrements stock on redemption
+- Deducts points from user
+- Creates redemption record
+
+
+5. ADMIN MAP (AdminMap.jsx)
+================================================================================
+PURPOSE: Visual map view of all destinations
+
+MAP CONFIGURATION:
+- Center: Mindoro, Philippines (13.0°N, 121.0°E)
+- Default Zoom: 9
+- Height: 600px (matches sidebar height)
+- Map Library: Leaflet or Google Maps
+
+FEATURES:
+- Markers for each destination
+- Different marker colors by category:
+  * Hotels: Blue markers
+  * Agri Farms: Green markers
+  * Tourist Spots: Purple markers
+- Click marker to view destination details
+- "Add Destination" button opens form with clicked coordinates
+- Real-time updates when destinations added/edited
+
+MARKER POPUPS:
+- Destination name
+- Category badge
+- Points value
+- "View Details" button
+- "Edit" and "Delete" quick actions
+
+ADMIN ACTIONS FROM MAP:
+1. Click map location → Add destination at coordinates
+2. Click marker → View/Edit/Delete destination
+3. Drag marker → Update destination coordinates
+4. Search box → Find specific destination
+
+
+6. ADMIN SETTINGS (Settings.jsx)
+================================================================================
+PURPOSE: Admin account management
+
+TABS:
+1. My Account
+2. Admin Accounts
+
+MY ACCOUNT TAB:
+- Profile picture (avatar)
+- Full name
+- Email address
+- Phone number
+- Role display
+- Member since date
+- "Save Changes" button
+- Password change section:
+  * Current password
+  * New password
+  * Confirm password
+
+ADMIN ACCOUNTS TAB:
+- List of all admin users
+- Table columns:
+  * Name
+  * Email
+  * Role (Administrator, Moderator)
+  * Status (Active, Inactive)
+  * Last Login
+  * Actions (Edit, Delete)
+- "Add Admin" button
+- Search and filter functionality
+
+ADD/EDIT ADMIN:
+- Full name
+- Email
+- Role selection (dropdown)
+- Status toggle (Active/Inactive)
+- Password (for new admins)
+- Permissions checkboxes:
+  * Manage Destinations
+  * Manage Badges
+  * Manage Rewards
+  * View Statistics
+  * Manage Users
+
+SECURITY FEATURES:
+- Require current password for changes
+- Email verification for new admins
+- Password strength indicator
+- Two-factor authentication (future)
+- Session timeout settings
+
+
+================================================================================
+                      USER PAGES EXPLAINED
+================================================================================
+
+1. MAP EXPLORER (MapExplorer.jsx)
+================================================================================
+PURPOSE: Main exploration interface for discovering destinations
+
+CORE FUNCTIONALITY:
+
+A. MAP VIEW:
+- Interactive map centered on user location
+- Destination markers with categories
+- Real-time user location tracking
+- Nearby destinations highlighted
+- Navigation feature to destinations
+
+B. DESTINATION DATA:
+{
+  id: 1,
+  name: 'Grand Hotel Resort',
+  category: 'hotel' | 'agri farm' | 'tourist spot',
+  description: 'Luxury resort...',
+  latitude: 14.5995,
+  longitude: 120.9842,
+  points: 50,
+  rating: 4.8,
+  reviewCount: 142,
+  rewards: [{id, name, description, points}]
+}
+
+C. FILTER SIDEBAR:
+- Category filters:
+  * All (shows everything)
+  * Hotels
+  * Agri Farms
+  * Tourist Spots
+- Distance range slider (1-50 km)
+- Rating filter (3+ stars, 4+ stars, etc.)
+- Points range filter
+- Applied filters shown as chips
+
+D. DESTINATION DETAIL PANEL:
+Opens when clicking a destination marker:
+- Destination image/icon
+- Name and category
+- Description
+- Distance from user
+- Points reward
+- Rating and review count
+- Available rewards list
+- Action buttons:
+  * "Navigate" → Start navigation
+  * "Check-In" → Opens QR scanner
+  * "View Reviews"
+  * "Save to Favorites"
+
+E. NAVIGATION FEATURE:
+When user clicks "Navigate":
+1. Draws route on map
+2. Shows distance and ETA
+3. Continuously tracks user position
+4. Updates remaining distance
+5. When within 50m → Shows check-in option
+6. Vibration/notification on arrival
+
+F. NEARBY DETECTION:
+- Uses LocationContext.getNearbyDestinations()
+- Default radius: 50km
+- Sorts by distance (closest first)
+- Updates as user moves
+- Shows count: "12 nearby destinations"
+
+G. VIEW MODES:
+- Map View (default): Full map with markers
+- List View: Card list of destinations with mini-maps
+- Toggle button in header
+
+H. STATE MANAGEMENT:
+- destinations: All destinations array
+- nearbyDestinations: Filtered by proximity
+- selectedDestination: Currently viewing
+- navigationDestination: Active navigation target
+- distanceToDestination: Real-time distance
+- isNavigating: Boolean for nav state
+- viewMode: 'map' | 'list'
+- activeFilter: Current category filter
+- savedLocations: User's favorites
+
+WORKFLOW EXAMPLE:
+1. User opens MapExplorer
+2. Map centers on user location (via LocationContext)
+3. Nearby destinations loaded and displayed
+4. User applies filter: "Tourist Spots"
+5. Map updates to show only tourist spots
+6. User clicks "Mountain Peak" marker
+7. Detail panel slides in from right
+8. User clicks "Navigate"
+9. Route drawn on map
+10. User travels to destination
+11. At 50m: "You've arrived! Check in now?"
+12. User scans QR code → Points awarded
+
+
+2. USER DASHBOARD (UserDashboard.jsx)
+================================================================================
+PURPOSE: User profile, statistics, and progress tracking
+
+LAYOUT STRUCTURE:
+- Header with logo and user info
+- UserDashboardTabs (Profile, Explore, Check-In, Rewards, Settings)
+- Main content area
+- Sidebar with stats
+
+USER STATS OBJECT:
+{
+  totalVisits: 12,
+  totalPoints: 2450,
+  badgesEarned: 3,
+  rewardsRedeemed: 0,
+  reviewsLeft: 8,
+  currentStreak: 7,        // Days
+  memberMonths: 4,
+  avgPointsWeek: 612.5,
+  totalReviews: 8
+}
+
+MAIN CONTENT SECTIONS:
+
+A. PROFILE CARD (Component):
+- User avatar (gradient with initial)
+- Full name
+- Email
+- Member since date
+- Progress to next level:
+  * Progress bar (e.g., 40% to Level 5)
+  * Points needed: "1,635 points to next level"
+- Level badge display
+- Animated with scaleIn + spring effect
+
+B. BADGES SECTION (Component):
+Grid of earned badges:
+- Badge icon (large emoji)
+- Badge name
+- Description
+- Earned date
+- Locked badges shown in grayscale
+- Progress indicator for partial completion
+- "12/20 destinations" for Globetrotter badge
+- Animated with slideInFromLeft + stagger
+
+C. ADVENTURE TIMELINE (Component):
+Chronological list of activities:
+{
+  id: 1,
+  type: 'checkin' | 'badge' | 'reward' | 'review',
+  destination: {name, category},
+  points: 100,
+  timestamp: '2 days ago',
+  icon: '📍'
+}
+- Timeline dots connected by vertical line
+- Icons for different activity types
+- Points displayed in green/red
+- "Load More" button for pagination
+- Animated with slideInFromBottom
+
+D. SIDEBAR QUICK STATS (Component):
+- Total Points (large display)
+- Visits This Month
+- Current Streak (days)
+- Badges Earned
+- Reviews Left
+- Avg Points/Week
+- Animated with slideInFromRight
+
+E. MILESTONE CARD (Component):
+Shows progress to next achievement:
+- Milestone icon and name
+- Description
+- Progress bar
+- "12 / 20 destinations visited"
+- Estimated completion date
+- Animated with spring effect
+
+F. ACCOUNT STATS (Component):
+- Member for X months
+- Total destinations visited
+- Total distance traveled
+- Favorite category
+- Most visited location
+- Best month (highest points)
+
+ANIMATIONS:
+1. Header logo: scale spring (stiffness: 100)
+2. User info: slide from right (delay: 0.1s)
+3. Title: slide from top (delay: 0.2s)
+4. Content grid: staggerContainer (delay: 0.3s)
+5. Profile card: scale spring (delay: 0.4s)
+6. Badges: slide from left (delay: 0.5s)
+7. Timeline: slide from bottom (delay: 0.6s)
+8. Sidebar: slide from right (no delay)
+
+DATA FETCHING:
+- useEffect on mount calls fetchUserData()
+- Fetches from API: /api/user/stats
+- Updates stats state
+- Refreshes every time tab is visited
+- Loading state shows skeleton screens
+
+
+3. CHECK-IN PAGE (CheckIn.jsx)
+================================================================================
+PURPOSE: QR code scanning for location check-ins
+
+CORE FEATURES:
+
+A. QR SCANNER COMPONENT:
+- Opens camera for QR scanning
+- Detects QR codes in real-time
+- Validates QR code format
+- Decodes destination information
+- Error handling for invalid codes
+
+QR CODE FORMAT:
+{
+  type: 'travelquest_checkin',
+  destinationId: 1,
+  timestamp: '2024-01-15T10:30:00Z',
+  signature: 'hash_for_verification'
+}
+
+B. CHECK-IN FLOW:
+1. User clicks "Scan QR Code" button
+2. Modal opens with QR scanner
+3. Camera activates (request permission)
+4. User points camera at QR code
+5. Scanner detects and decodes QR
+6. Validates destination exists
+7. Checks user location (must be within 100m)
+8. Verifies not checked in recently (cooldown)
+9. Creates check-in record
+10. Awards points to user
+11. Shows success toast
+12. Updates recent check-ins list
+
+C. RECENT CHECK-INS LIST:
+Displays last 10 check-ins:
+{
+  id: 1,
+  location: 'Grand Hotel Resort',
+  points: 50,
+  time: '2 hours ago',
+  status: 'success',
+  distance: '0 m',
+  verified: true
+}
+- Green checkmark for successful check-ins
+- Red X for failed attempts
+- Yellow warning for suspicious activity
+- Animated entry with slide effect
+
+D. CHECK-IN STATS SIDEBAR:
+- Today's Check-ins: 3
+- This Week: 12
+- Points Earned Today: 150
+- Current Streak: 7 days
+- Best Streak: 14 days
+- Most Visited: Mountain Peak (8 times)
+
+E. LOCATION VERIFICATION:
+Uses LocationContext to verify:
+- User is within 100m of destination
+- GPS accuracy is acceptable (< 50m)
+- Location services enabled
+- Not spoofing location (future: motion sensors)
+
+ERROR MESSAGES:
+- "Camera permission denied"
+- "Invalid QR code"
+- "You're too far from this location"
+- "You've already checked in here today"
+- "This destination is temporarily closed"
+- "QR code has expired"
+
+F. CHECK-IN VALIDATION:
+Server-side checks:
+- QR signature verification
+- Destination status (active/inactive)
+- User eligibility
+- Cooldown period (1 check-in per location per day)
+- Location proximity
+- Time window validity
+
+G. POINTS CALCULATION:
+Base points + Bonuses:
+- Base: Destination point value (e.g., 50)
+- First Visit Bonus: +25 points
+- Streak Bonus: +10 points per day streak
+- Review Bonus: +20 if user leaves review
+- Photo Bonus: +15 if user uploads photo
+- Peak Time Bonus: +10 if during busy hours
+Total displayed immediately after check-in
+
+H. QR CODE GENERATION (Admin Side):
+Admins generate QR codes for destinations:
+- Unique ID embedded
+- Expiration timestamp (optional)
+- Digital signature for security
+- Destination coordinates
+- Printable format for physical display
+- Refresh option for security
+
+
+4. REWARDS PAGE (Rewards.jsx)
+================================================================================
+PURPOSE: Browse and redeem rewards with points
+
+LAYOUT (Updated):
+- Main Area (2/3 width): Points balance + reward catalog
+- Sidebar (1/3 width): Earning tips + Activity + Quick actions
+
+USER POINTS STATE:
+- userPoints: 2450 (current balance)
+- pointsHistory: Array of point transactions
+- redeemedRewards: Array of claimed rewards
+
+A. POINTS BALANCE CARD:
+- Gradient background (orange to pink)
+- Large points display: 2,450
+- Motivational text: "Keep exploring!"
+- Gift icon animation
+- Animated with scale spring
+
+B. CATEGORY FILTERS:
+Horizontal button group:
+- All Rewards (default)
+- Merchandise
+- Food & Dining
+- Travel
+- Wellness
+Active category highlighted in teal
+
+C. REWARD CATALOG GRID:
+2-column grid on desktop, 1 on mobile:
+
+REWARD CARD:
+{
+  id: 1,
+  name: 'TravelQuest T-Shirt',
+  description: 'Premium cotton tee with logo',
+  points: 200,
+  category: 'merchandise',
+  image: '👕',
+  stock: 15,
+  available: true
+}
+
+Card Layout:
+- Icon/image (large emoji or image)
+- Reward name (bold)
+- Description (small text)
+- Points cost (orange, large)
+- "Redeem" button (if enough points)
+- "Locked" button (if insufficient points)
+- Stock indicator: "Only 5 left!"
+
+D. REDEMPTION FLOW:
+1. User clicks "Redeem" on reward
+2. Confirmation modal opens:
+   - Reward details
+   - Points cost
+   - Current balance
+   - New balance after redemption
+   - "Cancel" and "Confirm" buttons
+3. User confirms
+4. API call: POST /api/rewards/redeem
+5. Deducts points from user
+6. Decrements reward stock
+7. Creates redemption record
+8. Shows success toast
+9. Sends confirmation email
+10. Updates redeemed rewards list
+
+E. REDEEMED REWARDS SECTION:
+List of user's claimed rewards:
+- Reward icon and name
+- Description
+- Points spent
+- Redemption date
+- Status: Pending / Ready / Collected
+- Action button: "View Code" / "Collected"
+
+F. EARNING TIPS SIDEBAR (Card 1):
+Gradient purple-pink background:
+- 📍 Visit Locations → Check in to earn points
+- ⭐ Leave Reviews → Share your experience
+- 🏆 Complete Challenges → Unlock bonus points
+- 🔥 Daily Streak → Visit daily for bonuses
+
+G. RECENT ACTIVITY SIDEBAR (Card 2):
+White card with point transactions:
+- Mountain Peak Visit: +100 (green)
+- Review Bonus: +50 (green)
+- Hotel Check-in: +50 (green)
+- Welcome Reward: -10 (red, redeemed)
+
+H. QUICK ACTIONS SIDEBAR (Card 3):
+Gradient blue-indigo background:
+- "Find Locations" button → Navigate to /user/map
+- "View Progress" button → Navigate to /user/dashboard
+
+I. REWARD CATEGORIES EXPLAINED:
+
+MERCHANDISE:
+- T-shirts, mugs, bags, caps
+- Branded items
+- Physical items (shipping required)
+- Lower point cost (100-300 pts)
+
+FOOD & DINING:
+- Restaurant vouchers
+- Meal discounts
+- Free appetizers/desserts
+- Coffee shop coupons
+- Mid-range cost (200-500 pts)
+
+TRAVEL:
+- Hotel discount vouchers
+- Tour package deals
+- Flight discount codes
+- Travel insurance
+- Higher cost (500-2000 pts)
+
+WELLNESS:
+- Spa treatments
+- Gym passes
+- Massage vouchers
+- Yoga class packages
+- Mid-high cost (300-800 pts)
+
+J. REDEMPTION CODES:
+After redemption, user receives:
+- Unique redemption code (alphanumeric)
+- QR code for scanning at partner location
+- Expiration date
+- Terms and conditions
+- Partner contact info
+- "Add to Wallet" option (Apple/Google Pay)
+
+K. PARTNER INTEGRATION:
+Partners verify redemptions:
+- Scan user's QR code
+- Enter redemption code
+- System verifies:
+  * Code is valid
+  * Not already used
+  * Within expiration date
+  * For correct reward
+- Mark as "Collected"
+- Send usage data to admin
+
+
+5. USER SETTINGS (UserSettings.jsx)
+================================================================================
+PURPOSE: Account management and preferences
+
+TABS:
+1. Profile
+2. Security
+
+A. PROFILE TAB:
+
+User Avatar Section:
+- Large gradient avatar with initial
+- User name (bold)
+- Email address
+- Points and visits display
+- "Member since" date
+
+Profile Form Fields:
+- Full Name (text input)
+- Email Address (text input, verification required to change)
+- Phone Number (text input with format validation)
+- Address (text input)
+- All in styled input cards
+- "Save Changes" button at bottom
+
+Notification Preferences:
+- Email notifications toggle
+- Push notifications toggle
+- SMS notifications toggle
+- Marketing emails toggle
+
+Privacy Settings:
+- Profile visibility (Public/Friends/Private)
+- Show location toggle
+- Show activity toggle
+- Show badges toggle
+
+B. SECURITY TAB:
+
+Change Password Section:
+3 password fields:
+- Current Password (required)
+- New Password (with strength indicator)
+- Confirm Password (must match)
+"Update Password" button
+
+Password Requirements:
+- Minimum 8 characters
+- At least 1 uppercase letter
+- At least 1 lowercase letter
+- At least 1 number
+- At least 1 special character
+Strength indicator: Weak/Medium/Strong
+
+Two-Factor Authentication:
+- Enable/Disable toggle
+- Setup with QR code
+- Backup codes display
+- Recovery options
+
+Active Sessions:
+List of logged-in devices:
+- Device name (e.g., "Chrome on Windows")
+- Location (city, country)
+- Last active timestamp
+- "Sign Out" button for each
+- "Sign Out All Devices" option
+
+C. ACCOUNT ACTIONS:
+
+Delete Account Section:
+- Red warning card
+- Explanation of consequences
+- Confirmation required
+- "Delete My Account" button (red)
+- Sends confirmation email
+- 30-day grace period before permanent deletion
+
+D. DATA EXPORT:
+- "Download My Data" button
+- Generates JSON/CSV of:
+  * Profile information
+  * Check-in history
+  * Points transactions
+  * Badges earned
+  * Rewards redeemed
+  * Reviews written
+- Email when ready
+- Complies with GDPR
+
+E. LINKED ACCOUNTS:
+- Facebook (connect/disconnect)
+- Google (connect/disconnect)
+- Apple (connect/disconnect)
+- Benefits:
+  * Social login
+  * Share achievements
+  * Find friends on platform
+
+F. PREFERENCES:
+
+App Settings:
+- Language selection (English, Filipino, etc.)
+- Distance units (km/miles)
+- Temperature units (C/F)
+- Date format (MM/DD/YYYY, DD/MM/YYYY)
+- Time format (12hr/24hr)
+
+Map Preferences:
+- Default map view (Satellite/Street)
+- Show traffic toggle
+- Auto-center on user toggle
+- Marker clustering toggle
+
+Display Settings:
+- Theme: Light/Dark/Auto
+- Text size: Small/Medium/Large
+- Animation speed: Slow/Normal/Fast
+- Reduce motion toggle (accessibility)
+
+
+================================================================================
+                    COMMON COMPONENTS
+================================================================================
+
+1. AnimatedPage (AnimatedPage.jsx)
+================================================================================
+Simple wrapper for page-level animations
+
+<AnimatedPage className="min-h-screen bg-gray-50">
+  {/* Page content */}
+</AnimatedPage>
+
+ANIMATION:
+- Fades in: opacity 0.98 → 1 (0.15s)
+- Fades out: opacity 1 → 0.98 on exit
+- Applies to entire page
+- Used on all pages for consistency
+
+PROPS:
+- className: Additional CSS classes
+- children: Page content
+
+
+2. Button Component (Button.jsx)
+================================================================================
+Reusable button with variants and sizes
+
+VARIANTS:
+- primary: bg-teal-500 text-white (main actions)
+- secondary: bg-white text-slate-800 (alternative actions)
+- danger: bg-red-500 text-white (destructive actions)
+- outline: border-2 transparent background (subtle actions)
+
+SIZES:
+- sm: px-3 py-1.5 text-sm (compact)
+- md: px-4 py-2 text-base (default)
+- lg: px-6 py-3 text-lg (prominent)
+
+PROPS:
+- variant: 'primary' | 'secondary' | 'danger' | 'outline'
+- size: 'sm' | 'md' | 'lg'
+- icon: ReactNode (icon component/SVG)
+- disabled: boolean
+- onClick: function
+- className: additional classes
+- children: button text
+
+USAGE:
+<Button 
+  variant="primary" 
+  size="md" 
+  icon={<SaveIcon />}
+  onClick={handleSave}
+>
+  Save Changes
+</Button>
+
+FEATURES:
+- Icon support (left side)
+- Hover effects (scale, shadow)
+- Focus ring for accessibility
+- Disabled state styling
+- Loading spinner option (future)
+- Ripple effect on click (future)
+
+
+3. Modal Component (Modal.jsx)
+================================================================================
+Flexible modal dialog with animations
+
+STRUCTURE:
+- Backdrop (dark overlay, bg-black/70)
+- Modal container (centered)
+- Header (title + close button)
+- Content area (scrollable)
+- Footer (action buttons)
+
+PROPS:
+- isOpen: boolean (controls visibility)
+- onClose: function (called when closing)
+- title: string (modal header)
+- children: ReactNode (modal content)
+- size: 'sm' | 'md' | 'lg' | 'xl'
+
+ANIMATIONS:
+- Backdrop: fades in (opacity 0 → 0.7)
+- Modal: modalVariants (scale + y-offset)
+- AnimatePresence with mode="wait"
+- Smooth entry and exit
+
+SIZES:
+- sm: max-w-md (mobile-friendly)
+- md: max-w-2xl (default, forms)
+- lg: max-w-4xl (large content)
+- xl: max-w-6xl (full-width forms)
+
+RESPONSIVE:
+- w-full on mobile
+- Fixed max-width on desktop
+- Padding adjusts: p-4 sm:p-6
+- Scrollable content area
+- Mobile-optimized close button
+
+USAGE:
+<Modal
+  isOpen={showModal}
+  onClose={() => setShowModal(false)}
+  title="Add Destination"
+  size="md"
+>
+  <form>
+    {/* Form fields */}
+  </form>
+</Modal>
+
+KEYBOARD:
+- ESC key closes modal
+- Tab navigation within modal
+- Focus trap (can't tab outside)
+- Auto-focus first input
+
+ACCESSIBILITY:
+- ARIA labels
+- Role="dialog"
+- Focus management
+- Screen reader support
+
+
+4. ToastNotification (ToastNotification.jsx)
+================================================================================
+Toast notifications using react-hot-toast
+
+POSITION: top-right
+
+TYPES:
+- Success: Green with checkmark
+- Error: Red with X icon
+- Info: Blue with info icon
+- Warning: Yellow with warning icon
+- Loading: Spinner animation
+
+USAGE:
+import toast from 'react-hot-toast';
+
+// Success
+toast.success('Check-in successful!');
+
+// Error
+toast.error('Failed to load data');
+
+// Loading
+const loadingToast = toast.loading('Processing...');
+// Later:
+toast.dismiss(loadingToast);
+toast.success('Done!');
+
+// Custom duration
+toast.success('Saved!', { duration: 5000 });
+
+CONFIGURATION:
+- Duration: 3000ms default
+- Position: top-right
+- Max visible: 3 toasts
+- Auto-dismiss: true
+- Dismissible: true (click to close)
+- Icon: auto (based on type)
+
+ANIMATIONS:
+- Slide in from right
+- Slide out to right on dismiss
+- Progress bar showing remaining time
+- Smooth transitions
+
+COMPONENT PLACEMENT:
+Must be in root of page:
+<AnimatedPage>
+  <ToastNotification />
+  {/* Rest of page */}
+</AnimatedPage>
+
+
+5. UserDashboardTabs (UserDashboardTabs.jsx)
+================================================================================
+Unified navigation tabs for all user pages
+
+TABS:
+1. Profile (👤) → /user/dashboard
+2. Explore (🗺️) → /user/map
+3. Check-In (📱) → /user/checkin
+4. Rewards (🎁) → /user/rewards
+5. Settings (⚙️) → /user/settings
+
+FEATURES:
+- Active tab highlighted (white bg, shadow, border)
+- Inactive tabs have hover effect
+- Icons + labels
+- Responsive (icons only on small screens)
+- Smooth tab switching
+- Motion animation on mount
+
+STYLING:
+Active:
+- bg-white shadow-md
+- text-slate-900
+- border border-slate-200
+
+Inactive:
+- bg-white/50
+- text-slate-600
+- hover:bg-white hover:text-slate-800
+
+LAYOUT:
+- flex gap-2 mb-6 sm:mb-8
+- flex-1 on buttons (equal width)
+- NO overflow (fits naturally)
+- NO min-width constraints
+
+USAGE:
+<UserDashboardTabs />
+// Automatically highlights current page
+// Uses useLocation() to detect active route
+
+
+6. DashboardTabs (DashboardTabs.jsx)
+================================================================================
+Navigation tabs for admin pages
+
+TABS:
+1. Overview → /admin/dashboard
+2. Destinations → /admin/destinations
+3. Badges → /admin/badges
+4. Rewards → /admin/rewards
+5. Map → /admin/map
+6. Settings → /admin/settings
+
+STRUCTURE: Same as UserDashboardTabs but for admin routes
+
+USAGE:
+<DashboardTabs />
+
+
+7. UserHeader (UserHeader.jsx) - NEW COMPONENT
+================================================================================
+Reusable header for user pages
+
+FEATURES:
+- TravelQuest logo (animated scale)
+- User name and points
+- Logout button
+- Responsive layout
+- Sticky positioning option
+
+PROPS:
+- user: User object {name, points}
+- onLogout: Function to handle logout
+
+USAGE:
+<UserHeader 
+  user={user} 
+  onLogout={handleLogout} 
+/>
+
+
+8. AdminHeader (AdminHeader.jsx) - NEW COMPONENT
+================================================================================
+Reusable header for admin pages
+
+FEATURES:
+- TravelQuest logo
+- Admin name and role
+- Logout button
+- Responsive layout
+
+PROPS:
+- admin: Admin object {name, role}
+- onLogout: Function to handle logout
+
+USAGE:
+<AdminHeader 
+  admin={currentAdmin} 
+  onLogout={handleLogout} 
+/>
+
+
+================================================================================
+                        DATA FLOW EXPLAINED
+================================================================================
+
+USER CHECK-IN FLOW (Complete Journey):
+================================================================================
+
+1. USER DISCOVERS DESTINATION:
+   - Opens MapExplorer
+   - Sees nearby destinations
+   - Clicks on "Grand Hotel Resort"
+   - Views destination details
+
+2. USER NAVIGATES TO DESTINATION:
+   - Clicks "Navigate" button
+   - Map draws route
+   - Real-time distance tracking
+   - Receives "Arrived!" notification at 50m
+
+3. USER INITIATES CHECK-IN:
+   - Clicks "Check-In" button
+   - Redirected to /user/checkin OR
+   - Modal opens with QR scanner
+
+4. QR CODE SCANNING:
+   - Camera activates
+   - User scans QR code at location
+   - QR decoded: {destinationId: 1, timestamp, signature}
+
+5. VALIDATION (Frontend):
+   - Checks QR format is valid
+   - Verifies signature hasn't expired
+   - Gets user location from LocationContext
+
+6. API REQUEST:
+   POST /api/checkins
+   Body: {
+     destinationId: 1,
+     qrCode: "scanned_code",
+     userLocation: {
+       latitude: 14.5995,
+       longitude: 120.9842,
+       accuracy: 10
+     },
+     timestamp: "2024-01-15T10:30:00Z"
+   }
+
+7. BACKEND VALIDATION:
+   - Verifies user is authenticated
+   - Checks destination exists and is active
+   - Calculates distance (user to destination)
+   - Validates distance < 100m
+   - Checks user hasn't checked in today
+   - Verifies QR signature
+   - Checks QR hasn't expired
+
+8. POINTS CALCULATION:
+   basePoints = destination.points (50)
+   firstVisitBonus = isFirstVisit ? 25 : 0
+   streakBonus = userStreak * 10
+   totalPoints = basePoints + bonuses
+
+9. DATABASE UPDATES:
+   - Create check_in record
+   - Update user.points += totalPoints
+   - Update user.total_visits++
+   - Update user.current_streak
+   - Update destination.visit_count++
+   - Check badge requirements
+   - Award badges if requirements met
+
+10. API RESPONSE:
+    {
+      success: true,
+      message: "Check-in successful!",
+      points_earned: 85,
+      total_points: 2535,
+      badges_unlocked: ["Explorer"],
+      destination: {
+        name: "Grand Hotel Resort",
+        category: "hotel"
+      }
+    }
+
+11. FRONTEND UPDATE:
+    - Shows success toast
+    - Updates user points in UI
+    - Adds to recent check-ins list
+    - Shows badge unlock animation (if any)
+    - Confetti animation
+    - Updates stats in real-time
+
+12. POST CHECK-IN:
+    - Prompts user to leave review
+    - Shows destination rewards available
+    - Suggests next nearby destination
+    - Updates daily streak indicator
+
+
+REWARD REDEMPTION FLOW:
+================================================================================
+
+1. USER BROWSES REWARDS:
+   - Opens /user/rewards
+   - Sees current points: 2,450
+   - Filters by category: "Food & Dining"
+   - Finds "Restaurant Voucher $20"
+
+2. USER SELECTS REWARD:
+   - Clicks reward card
+   - Reward details modal opens:
+     * Name: Restaurant Voucher $20
+     * Description: Valid at 50+ restaurants
+     * Cost: 500 points
+     * Your balance: 2,450 points
+     * New balance: 1,950 points
+   - "Redeem Now" button
+
+3. CONFIRMATION:
+   - User clicks "Redeem Now"
+   - Final confirmation dialog:
+     "Are you sure? This action cannot be undone."
+   - User confirms
+
+4. API REQUEST:
+   POST /api/rewards/redeem
+   Body: {
+     rewardId: 5,
+     userId: 123
+   }
+
+5. BACKEND VALIDATION:
+   - Verifies user has enough points
+   - Checks reward is available
+   - Checks reward stock > 0
+   - Verifies user hasn't redeemed same reward recently
+
+6. DATABASE UPDATES:
+   - Deduct points: user.points -= 500
+   - Decrement stock: reward.stock--
+   - Create redemption record:
+     {
+       userId: 123,
+       rewardId: 5,
+       pointsSpent: 500,
+       redemptionCode: "TQRW-ABCD-1234",
+       status: "pending",
+       expiresAt: "2024-02-15"
+     }
+   - Update user.rewards_redeemed++
+
+7. GENERATE REDEMPTION CODE:
+   - Unique alphanumeric code
+   - QR code image generated
+   - Expiration date set (30 days)
+   - Verification signature
+
+8. API RESPONSE:
+   {
+     success: true,
+     message: "Reward redeemed!",
+     redemption: {
+       code: "TQRW-ABCD-1234",
+       qrCode: "base64_image_data",
+       expiresAt: "2024-02-15",
+       instructions: "Show this code at...",
+       partnerLocations: [...]
+     },
+     newBalance: 1950
+   }
+
+9. FRONTEND UPDATE:
+   - Success toast shown
+   - Points balance updated
+   - Reward moved to "Redeemed" section
+   - Modal shows redemption details
+   - "Add to Wallet" button
+   - "Email Code" button
+   - "View Instructions" button
+
+10. EMAIL NOTIFICATION:
+    - Sent to user email
+    - Contains redemption code
+    - QR code image attached
+    - Partner locations list
+    - Expiration reminder
+    - Terms and conditions
+
+11. USER USES REWARD:
+    - User visits partner location
+    - Shows QR code or enters code
+    - Partner scans/validates
+    - System marks as "used"
+    - Status: pending → used
+
+12. POST-REDEMPTION:
+    - System tracks usage
+    - Sends satisfaction survey
+    - Awards feedback points (+10)
+    - Suggests similar rewards
+
+
+================================================================================
+                        SECURITY & VALIDATION
+================================================================================
+
+AUTHENTICATION SECURITY:
+================================================================================
+- JWT tokens for API authentication
+- Token stored in localStorage (secure context only)
+- Token expiration: 24 hours
+- Refresh token mechanism
+- HTTPS required in production
+- CORS configured for frontend domain only
+
+PASSWORD SECURITY:
+- Bcrypt hashing (10 rounds minimum)
+- Password requirements enforced
+- Password strength indicator
+- No password in API responses
+- Password reset via email token
+- Token expires after 1 hour
+
+QR CODE SECURITY:
+- Digital signature using HMAC-SHA256
+- Timestamp validation (max 5 minutes old)
+- One-time use codes
+- Location verification required
+- Rate limiting (max 10 scans per minute)
+- Invalid attempts logged
+
+LOCATION SECURITY:
+- GPS accuracy requirements (< 50m)
+- Distance verification (server-side)
+- Motion sensor validation (anti-spoofing)
+- IP geolocation cross-check
+- Suspicious activity detection
+- Location history tracking
+
+API SECURITY:
+- Rate limiting per user/IP
+- Input validation and sanitization
+- SQL injection prevention (parameterized queries)
+- XSS prevention (escaped output)
+- CSRF tokens for state-changing operations
+- API key rotation
+- Request signing for critical operations
+
+
+================================================================================
+                    FUTURE ENHANCEMENTS
+================================================================================
+
+PLANNED FEATURES:
+1. Social Features:
+   - Friend system
+   - Leaderboards
+   - Social feed
+   - Challenge friends
+   - Share achievements
+
+2. Advanced Gamification:
+   - Seasonal events
+   - Limited-time challenges
+   - Daily/weekly quests
+   - Achievement tiers
+   - Profile customization
+
+3. Partner Integration:
+   - Partner dashboard
+   - Real-time redemption
+   - Analytics for partners
+   - Promotional campaigns
+   - Partnership tiers
+
+4. Mobile App:
+   - React Native version
+   - Push notifications
+   - Offline mode
+   - Camera integration
+   - Widgets
+
+5. Analytics:
+   - User behavior tracking
+   - Heat maps
+   - Popular routes
+   - Peak visit times
+   - Conversion funnels
+
+6. AI Features:
+   - Personalized recommendations
+   - Smart routing
+   - Photo recognition
+   - Chatbot support
+   - Predictive rewards
+
+
+================================================================================
+                        TROUBLESHOOTING
+================================================================================
+
+COMMON ISSUES:
+
+1. "Camera not working":
+   - Check browser permissions
+   - HTTPS required for camera access
+   - Test on different browser
+   - Clear cache and reload
+
+2. "Location not updating":
+   - Enable location services
+   - Check browser permissions
+   - GPS signal weak (outdoors better)
+   - Try browser location reset
+
+3. "Points not updating":
+   - Check API connection
+   - Verify backend is running
+   - Check network tab for errors
+   - Clear localStorage and re-login
+
+4. "Animations not smooth":
+   - Reduce animation speed in settings
+   - Check device performance
+   - Disable other animations
+   - Update browser
+
+5. "QR code not scanning":
+   - Ensure good lighting
+   - Hold steady
+   - Clean camera lens
+   - Try different angle
+   - Check QR code is valid
+
+
+================================================================================
+                        CONCLUSION
+================================================================================
+
+This TravelQuest system is a comprehensive location-based gamification platform
+with a clean separation between admin and user functionality. The codebase is
+well-structured, with reusable components, centralized state management, and
+smooth animations throughout.
+
+Key architectural decisions:
+- React Context for state (AuthContext, LocationContext)
+- Framer Motion for animations (consistent, performant)
+- Tailwind for styling (responsive, utility-first)
+- API service layer (ready for backend integration)
+- Modular component structure (easy to maintain)
+
+The system is currently using localStorage for demo purposes but has a complete
+API service layer ready for Laravel backend integration. All major features are
+implemented with proper validation, error handling, and user feedback.
+
+================================================================================
+                        END OF DATABASE
+================================================================================
