@@ -13,6 +13,7 @@ import toast from 'react-hot-toast';
 const Rewards = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
   const [userPoints, setUserPoints] = useState(2450);
   const [rewards, setRewards] = useState([
@@ -121,10 +122,17 @@ const Rewards = () => {
       
       <UserHeader user={user} onLogout={handleLogout} />
 
-      <UserDashboardTabs />
+      <UserDashboardTabs onCollapseChange={setSidebarCollapsed} />
 
       {/* Main Content */}
-      <main className="md:ml-64 sm:ml-20 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8 transition-all duration-300">
+      <main 
+        className={`
+          transition-all duration-300 ease-in-out
+          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
+          sm:ml-20 
+          max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
+        `}
+      >
         <motion.h2 
           className="text-2xl sm:text-3xl font-bold text-slate-900 mb-6 sm:mb-8"
           initial={{ y: -20, opacity: 0 }}

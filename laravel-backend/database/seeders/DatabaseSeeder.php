@@ -13,15 +13,30 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Seed lookup/reference tables first (no foreign key dependencies)
+        $this->call([
+            UserRoleSeeder::class,
+            UserStatusSeeder::class,
+            DestinationCategorySeeder::class,
+            RewardCategorySeeder::class,
+            BadgeCategorySeeder::class,
+            DestinationStatusSeeder::class,
+            DestinationAmenitySeeder::class,
+        ]);
+
+        // Optionally create a test user
         // User::factory(10)->create();
 
-        User::firstOrCreate(
-            ['email' => 'test@example.com'],
-            [
-                'name' => 'Test User',
-                'password' => 'password',
-                'email_verified_at' => now(),
-            ]
-        );
+        // User::firstOrCreate(
+        //     ['email' => 'test@example.com'],
+        //     [
+        //         'first_name' => 'Test',
+        //         'last_name' => 'User',
+        //         'password' => bcrypt('password'),
+        //         'email_verified_at' => now(),
+        //         'role_id' => 2, // user role
+        //         'status_id' => 1, // active status
+        //     ]
+        // );
     }
 }

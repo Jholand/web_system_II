@@ -21,6 +21,7 @@ const MapExplorer = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { userLocation, getNearbyDestinations, calculateDistance } = useLocation();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [destinations, setDestinations] = useState([]);
   const [nearbyDestinations, setNearbyDestinations] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
@@ -227,10 +228,17 @@ const MapExplorer = () => {
       
       <UserHeader user={user} onLogout={handleLogout} />
 
-      <UserDashboardTabs />
+      <UserDashboardTabs onCollapseChange={setSidebarCollapsed} />
 
       {/* Main Content */}
-      <main className="md:ml-64 sm:ml-20 max-w-7xl mx-auto px-6 pt-24 pb-32 sm:pb-20 md:pb-8 transition-all duration-300">
+      <main 
+        className={`
+          transition-all duration-300 ease-in-out
+          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
+          sm:ml-20 
+          max-w-7xl mx-auto px-6 pt-24 pb-32 sm:pb-20 md:pb-8
+        `}
+      >
         {/* Page Title */}
         <motion.h2 
           className="text-3xl font-bold text-slate-900 mb-8"

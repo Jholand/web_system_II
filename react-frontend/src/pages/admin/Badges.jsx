@@ -14,6 +14,7 @@ import Pagination from '../../components/common/Pagination';
 
 const Badges = () => {
   const navigate = useNavigate();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [modalState, setModalState] = useState({
     isOpen: false,
     mode: '',
@@ -276,9 +277,16 @@ const Badges = () => {
         onLogout={handleLogout}
       />
 
-      <DashboardTabs />
+      <DashboardTabs onCollapseChange={setSidebarCollapsed} />
 
-      <main className="md:ml-64 sm:ml-20 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8 transition-all duration-300">
+      <main 
+        className={`
+          transition-all duration-300 ease-in-out
+          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
+          sm:ml-20 
+          max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
+        `}
+      >
         {/* Page Header */}
         <motion.div 
           className="mb-6"

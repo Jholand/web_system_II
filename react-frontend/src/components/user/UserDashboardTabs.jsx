@@ -3,10 +3,18 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Map, Smartphone, Gift, Settings, ChevronLeft } from 'lucide-react';
 
-const UserDashboardTabs = () => {
+const UserDashboardTabs = ({ onCollapseChange }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const handleToggleCollapse = () => {
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    if (onCollapseChange) {
+      onCollapseChange(newState);
+    }
+  };
 
   const getIcon = (id, className) => {
     const props = { 
@@ -53,7 +61,7 @@ const UserDashboardTabs = () => {
       >
         {/* Collapse Toggle Button */}
         <motion.button
-          onClick={() => setIsCollapsed(!isCollapsed)}
+          onClick={handleToggleCollapse}
           className="absolute -right-3 top-8 w-6 h-6 bg-teal-500 hover:bg-teal-600 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 z-40 group"
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           whileHover={{ scale: 1.1 }}
@@ -220,11 +228,9 @@ const UserDashboardTabs = () => {
                   navigate(tab.path);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="flex flex-col items-center justify-center gap-1 p-2 relative z-10 min-w-[60px]"
+                className="flex flex-col items-center justify-center gap-1 p-2 relative z-10 min-w-[60px] bg-transparent"
               >
-                <div>
-                  {getIcon(tab.id, `w-6 h-6 transition-colors duration-200 ${active ? 'text-teal-600' : 'text-slate-400'}`)}
-                </div>
+                {getIcon(tab.id, `w-6 h-6 transition-colors duration-200 ${active ? 'text-teal-600' : 'text-slate-400'}`)}
                 <span className={`text-[10px] font-medium transition-colors duration-200 ${active ? 'text-teal-600' : 'text-slate-500 opacity-70'}`}>
                   {tab.label.split(' ')[0]}
                 </span>

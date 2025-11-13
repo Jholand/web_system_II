@@ -11,6 +11,7 @@ import ToastNotification from '../../components/common/ToastNotification';
 const DestinationView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Destination data state
   const [destination, setDestination] = useState(null);
@@ -191,9 +192,17 @@ const DestinationView = () => {
         </div>
       </header>
 
+      <DashboardTabs onCollapseChange={setSidebarCollapsed} />
+
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        <DashboardTabs />
+      <main 
+        className={`
+          transition-all duration-300 ease-in-out
+          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
+          sm:ml-20 
+          max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
+        `}
+      >
 
         {/* Section Navigation */}
         <motion.div

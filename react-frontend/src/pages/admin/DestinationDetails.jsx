@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { slideInFromRight, fadeIn } from '../../utils/animations';
 import AnimatedPage from '../../components/common/AnimatedPage';
+import AdminHeader from '../../components/common/AdminHeader';
 import DashboardTabs from '../../components/dashboard/DashboardTabs';
 import Button from '../../components/common/Button';
 import toast from 'react-hot-toast';
@@ -11,6 +12,7 @@ import ToastNotification from '../../components/common/ToastNotification';
 const DestinationDetails = () => {
   const { id } = useParams(); // Get destination ID from URL
   const navigate = useNavigate();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isEditMode = id && id !== 'new'; // Check if ID exists AND is not 'new'
 
   console.log('DestinationDetails - ID:', id, 'isEditMode:', isEditMode);
@@ -314,28 +316,57 @@ const DestinationDetails = () => {
     { id: 'contact', label: 'Contact Info', icon: '📞' },
   ];
 
+  const handleLogout = () => {
+    navigate('/login');
+  };
+
   return (
     <AnimatedPage className="min-h-screen bg-gray-50">
       <ToastNotification />
       
       {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="md:ml-64 max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">
-              {isEditMode ? `Edit Destination - ${formData.name}` : 'Add New Destination'}
-            </h1>
-            <p className="text-sm text-slate-600">
-              {isEditMode ? 'Update destination information' : 'Create a new destination'}
-            </p>
-          </div>
-        </div>
-      </header>
+      <AdminHeader 
+        admin={{ name: 'em', role: 'Administrator' }}
+        onLogout={handleLogout}
+      />
 
-      <DashboardTabs />
+      <DashboardTabs onCollapseChange={setSidebarCollapsed} />
 
       {/* Main Content */}
-      <main className="md:ml-64 sm:ml-20 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8 transition-all duration-300">
+      <main 
+        className={`
+          transition-all duration-300 ease-in-out
+          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
+          sm:ml-20 
+          max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
+        `}
+      >
+        {/* Page Header */}
+        <motion.div 
+          className="mb-6"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl flex items-center justify-center shadow-lg">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
+                {isEditMode ? 'Edit Destination' : 'Add New Destination'}
+              </h2>
+              <p className="text-slate-600 text-sm sm:text-base">
+                {isEditMode 
+                  ? `Update information for ${formData.name || 'this destination'}` 
+                  : 'Create a new destination for travelers to explore'}
+              </p>
+            </div>
+          </div>
+        </motion.div>
 
         {/* Section Navigation */}
         <motion.div

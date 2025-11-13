@@ -13,6 +13,7 @@ import Button from '../../components/common/Button';
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
 
   const handleLogout = () => {
     // Add logout logic here
@@ -27,10 +28,17 @@ const Dashboard = () => {
       />
 
       {/* Sidebar Navigation */}
-      <DashboardTabs />
+      <DashboardTabs onCollapseChange={setSidebarCollapsed} />
 
       {/* Main Content */}
-      <main className="md:ml-64 sm:ml-20 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8 transition-all duration-300">
+      <main 
+        className={`
+          transition-all duration-300 ease-in-out
+          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
+          sm:ml-20 
+          max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
+        `}
+      >
         {/* Page Title */}
         <motion.h2 
           initial={{ opacity: 0, x: -20 }}

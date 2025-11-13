@@ -19,6 +19,7 @@ import AccountStats from '../../components/user/AccountStats';
 const UserDashboard = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   const [visits, setVisits] = useState([]);
   const [badges, setBadges] = useState([]);
@@ -85,10 +86,17 @@ const UserDashboard = () => {
       
       <UserHeader user={user} onLogout={handleLogout} />
 
-      <UserDashboardTabs />
+      <UserDashboardTabs onCollapseChange={setSidebarCollapsed} />
 
       {/* Main Content */}
-      <main className="md:ml-64 sm:ml-20 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8 transition-all duration-300">
+      <main 
+        className={`
+          transition-all duration-300 ease-in-out
+          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
+          sm:ml-20 
+          max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
+        `}
+      >
         {/* Page Title */}
         <motion.h2 
           initial={{ y: -20, opacity: 0 }}

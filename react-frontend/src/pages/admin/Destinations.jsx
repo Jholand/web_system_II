@@ -15,6 +15,7 @@ import Pagination from '../../components/common/Pagination';
 
 const Destinations = () => {
   const navigate = useNavigate();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [modalState, setModalState] = useState({
     isOpen: false,
     mode: '',
@@ -465,9 +466,16 @@ const Destinations = () => {
         admin={{ name: 'em', role: 'Administrator' }}
         onLogout={handleLogout}
       />
-      <DashboardTabs />
+      <DashboardTabs onCollapseChange={setSidebarCollapsed} />
       {/* Main Content */}
-      <main className="md:ml-64 sm:ml-20 max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8 transition-all duration-300">
+      <main 
+        className={`
+          transition-all duration-300 ease-in-out
+          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
+          sm:ml-20 
+          max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
+        `}
+      >
         {/* Page Header */}
         <motion.div 
           className="mb-6"
