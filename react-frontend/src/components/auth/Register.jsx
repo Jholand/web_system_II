@@ -36,7 +36,7 @@ const Register = () => {
 
     if (result.success) {
       toast.success('Registration successful!');
-      navigate('/map');
+      navigate('/user/dashboard'); // ✅ Redirect to dashboard (not map)
     } else {
       toast.error(result.error || 'Registration failed');
     }
@@ -45,27 +45,40 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50 flex items-center justify-center px-4 py-12 relative">
+      {/* Back to Home Button */}
+      <Link
+        to="/"
+        className="absolute top-6 left-6 flex items-center space-x-2 text-gray-600 hover:text-teal-600 transition-colors"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        <span className="font-medium">Back to Home</span>
+      </Link>
+
       <div className="max-w-md w-full">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-teal-400 to-teal-600 rounded-2xl shadow-lg mb-4">
-            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900">TravelQuest</h1>
+          <Link to="/" className="inline-block">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-teal-400 to-teal-600 rounded-2xl shadow-lg mb-4 hover:scale-105 transition-transform">
+              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+          </Link>
+          <h1 className="text-3xl font-light text-slate-900">TravelQuest</h1>
           <p className="text-slate-600 mt-2">Start Your Adventure</p>
         </div>
 
         {/* Register Form */}
         <div className="bg-white rounded-3xl shadow-xl p-8 border border-slate-200">
-          <h2 className="text-2xl font-bold text-slate-900 mb-6">Create Account</h2>
+          <h2 className="text-2xl font-light text-slate-900 mb-6">Create Account</h2>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="relative">
-              <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">
+              <label className="block text-xs font-normal text-slate-600 mb-2 uppercase tracking-widest">
                 Full Name
               </label>
               <div className="relative group">
@@ -87,7 +100,7 @@ const Register = () => {
             </div>
 
             <div className="relative">
-              <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">
+              <label className="block text-xs font-normal text-slate-600 mb-2 uppercase tracking-widest">
                 Email Address
               </label>
               <div className="relative group">
@@ -109,7 +122,7 @@ const Register = () => {
             </div>
 
             <div className="relative">
-              <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">
+              <label className="block text-xs font-normal text-slate-600 mb-2 uppercase tracking-widest">
                 Password
               </label>
               <div className="relative group">
@@ -132,7 +145,7 @@ const Register = () => {
             </div>
 
             <div className="relative">
-              <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">
+              <label className="block text-xs font-normal text-slate-600 mb-2 uppercase tracking-widest">
                 Confirm Password
               </label>
               <div className="relative group">
@@ -167,7 +180,7 @@ const Register = () => {
           <div className="mt-6 text-center">
             <p className="text-slate-600">
               Already have an account?{' '}
-              <Link to="/login" className="text-teal-600 hover:text-teal-700 font-semibold">
+                <Link to="/login" className="text-teal-600 hover:text-teal-700 font-normal">
                 Sign in
               </Link>
             </p>

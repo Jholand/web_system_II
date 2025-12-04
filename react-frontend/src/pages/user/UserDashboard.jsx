@@ -1,75 +1,91 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { staggerContainer, slideInFromRight, slideInFromBottom, scaleIn } from '../../utils/animations';
-import AnimatedPage from '../../components/common/AnimatedPage';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/api';
 import ToastNotification from '../../components/common/ToastNotification';
-import Button from '../../components/common/Button';
 import UserHeader from '../../components/common/UserHeader';
 import UserDashboardTabs from '../../components/user/UserDashboardTabs';
+import Modal from '../../components/common/Modal';
+import QRScanner from '../../components/qr/QRScanner';
+import CheckInReview from '../../components/user/CheckInReview';
+import { useCheckIn } from '../../hooks/useCheckIn.jsx';
 import ProfileCard from '../../components/user/ProfileCard';
 import BadgesSection from '../../components/user/BadgesSection';
 import AdventureTimeline from '../../components/user/AdventureTimeline';
 import QuickStats from '../../components/user/QuickStats';
 import MilestoneCard from '../../components/user/MilestoneCard';
 import AccountStats from '../../components/user/AccountStats';
+// ⚡ REACT QUERY - INSTANT CACHED LOADING (TikTok/Facebook speed)
+import { useUserBadges, useCheckins, useCheckinStats, usePrefetchUserData } from '../../hooks/useUserData';
 
-const UserDashboard = () => {
+// ⚡ INSTANT LOADING DASHBOARD - React Query (TikTok/Facebook speed)
+const UserDashboard = React.memo(() => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeTab, setActiveTab] = useState('profile');
-  const [visits, setVisits] = useState([]);
-  const [badges, setBadges] = useState([]);
-  const [rewards, setRewards] = useState([]);
-  const [stats, setStats] = useState({
-    totalVisits: 12,
-    totalPoints: 2450,
-    badgesEarned: 3,
+  
+  // ⚡ REACT QUERY - INSTANT from cache, refetch in background
+  const { data: badgesData, isLoading: badgesLoading } = useUserBadges();
+  const { data: checkinsData, isLoading: checkinsLoading } = useCheckins(5);
+  const { data: statsData, isLoading: statsLoading } = useCheckinStats();
+  const { prefetchAll } = usePrefetchUserData();
+  
+  // Extract data with fallbacks
+  const visits = checkinsData?.checkins || [];
+  const badges = badgesData?.earned || [];
+  const stats = {
+    totalVisits: statsData?.total_visits || 0,
+    totalPoints: statsData?.total_points || 0,
+    badgesEarned: statsData?.badges_earned || 0,
     rewardsRedeemed: 0,
-    reviewsLeft: 8,
-    currentStreak: 7,
-    memberMonths: 4,
-    avgPointsWeek: 612.5,
-    totalReviews: 8,
-  });
-  const [loading, setLoading] = useState(false);
-
+    reviewsLeft: 0,
+    currentStreak: statsData?.current_streak || 0,
+    memberMonths: 0,
+    avgPointsWeek: 0,
+    totalReviews: 0,
+  };
+  
+  const dataFetched = !badgesLoading && !checkinsLoading && !statsLoading;
+  
+  // Prefetch all user data on mount
   useEffect(() => {
-    fetchUserData();
+    prefetchAll();
+  }, []);
+  
+  const {
+    showScanModal,
+    setShowScanModal,
+    showReviewModal,
+    setShowReviewModal,
+    scannedQRCode,
+    checkInDestination,
+    destinations,
+    fetchDestinations,
+    handleScanSuccess,
+    handleReviewSubmit,
+    resetCheckIn
+  } = useCheckIn();
+
+  // ✅ Optimized data fetching - Background refresh only
+  // Prefetch destinations on mount
+  useEffect(() => {
+    fetchDestinations();
+  }, [fetchDestinations]);
+
+  const handleLogout = useCallback(() => {
+    if (logout) logout();
+    navigate('/');
+  }, [logout, navigate]);
+
+  const handleSidebarCollapse = useCallback((collapsed) => {
+    setSidebarCollapsed(collapsed);
   }, []);
 
-  const fetchUserData = async () => {
-    try {
-      // Mock data for now - will connect to API later
-      setVisits([
-        { id: 1, destination: { name: 'Mountain Peak', category: 'tourist spot' }, points: 100, createdAt: '2 days ago' },
-        { id: 2, destination: { name: 'Grand Hotel', category: 'hotel' }, points: 50, createdAt: '5 days ago' },
-        { id: 3, destination: { name: 'Organic Farm', category: 'agri farm' }, points: 30, createdAt: '1 week ago' },
-      ]);
-      
-      setBadges([
-        { id: 1, name: 'Explorer', description: 'Visit 5 destinations', icon: '🗺️', earned: true, earnedAt: '3 weeks ago' },
-        { id: 2, name: 'Reviewer', description: 'Leave 10 reviews', icon: '⭐', earned: true, earnedAt: '2 weeks ago' },
-        { id: 3, name: 'Collector', description: 'Collect 5 badges', icon: '🏆', earned: true, earnedAt: '1 week ago' },
-        { id: 4, name: 'Globetrotter', description: 'Visit 20 destinations', icon: '🌍', earned: false },
-        { id: 5, name: 'Master', description: 'Visit 50 destinations', icon: '👑', earned: false },
-      ]);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const handleScannerClick = useCallback(() => {
+    setShowScanModal(true);
+  }, []);
 
-  const handleLogout = () => {
-    if (logout) logout();
-    navigate('/login');
-  };
-
-  const progressToNextLevel = 40; // 40%
+  const progressToNextLevel = 40;
   const pointsToNextLevel = 1635;
 
   const milestoneData = {
@@ -81,91 +97,145 @@ const UserDashboard = () => {
   };
 
   return (
-    <AnimatedPage className="min-h-screen bg-gray-50">
-      <ToastNotification />
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 relative">
+      {/* Tourism Background Pattern */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute inset-0 opacity-[0.02]" style={{ 
+          backgroundImage: 'radial-gradient(circle, #10b981 1px, transparent 1px)', 
+          backgroundSize: '40px 40px' 
+        }} />
+      </div>
       
+      <ToastNotification />
       <UserHeader user={user} onLogout={handleLogout} />
+      <UserDashboardTabs onCollapseChange={handleSidebarCollapse} onScannerClick={handleScannerClick} />
 
-      <UserDashboardTabs onCollapseChange={setSidebarCollapsed} />
-
-      {/* Main Content */}
+      {/* Main Content - Zero Animation Delay */}
       <main 
-        className={`
-          transition-all duration-300 ease-in-out
-          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
-          sm:ml-20 
-          max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
-        `}
+        className={`relative z-10 transition-all duration-150 ${
+          sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'
+        }`}
       >
-        {/* Page Title */}
-        <motion.h2 
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="text-2xl sm:text-3xl font-bold text-slate-900 mb-6 sm:mb-8"
-        >
-          Your Adventure
-        </motion.h2>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-20 sm:pt-24 md:pt-28 pb-32 sm:pb-20 md:pb-8">
+          
+          {/* Page Header - Instant Render */}
+          <div className="mb-6 sm:mb-8 animate-fade-in">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-5 sm:p-6 shadow-md border border-emerald-100">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                  <svg className="w-7 h-7 sm:w-8 sm:h-8 text-white drop-shadow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+                    My Dashboard
+                  </h1>
+                  <p className="text-sm text-gray-600">
+                    Track your adventures and explore new destinations
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Page Title */}
+          <h2 className="text-2xl sm:text-3xl font-light text-gray-900 mb-6 sm:mb-8 animate-slide-up">
+            Your Adventure
+          </h2>
 
-        {/* Content Grid */}
-        <motion.div 
-          variants={staggerContainer}
-          initial="hidden"
-          animate="visible"
-          className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6"
-        >
-          {/* Left Column - Profile Card */}
-          <motion.div variants={slideInFromBottom} className="lg:col-span-2 space-y-4 sm:space-y-6">
-            {/* Profile Overview */}
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.4, type: "spring", stiffness: 100 }}
-            >
-              <ProfileCard
-                userName="Alex Thompson"
-                userLevel="Level Explorer"
-                memberSince="Jan 2024"
-                totalPoints={stats.totalPoints}
-                progress={progressToNextLevel}
-                pointsToNext={pointsToNextLevel}
-              />
-            </motion.div>
+          {/* Content Grid - Instant Render */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+            
+            {/* Left Column - Profile & Activity */}
+            <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+              
+              {/* Profile Card */}
+              <div className="animate-fade-in" style={{ animationDelay: '50ms' }}>
+                <ProfileCard
+                  userName={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'User'}
+                  userLevel={`Level ${user?.level || 1}`}
+                  memberSince={user?.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'New Member'}
+                  totalPoints={stats.totalPoints}
+                  progress={progressToNextLevel}
+                  pointsToNext={pointsToNextLevel}
+                />
+              </div>
 
-            {/* Badges Earned */}
-            <motion.div
-              initial={{ x: -30, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.5 }}
-            >
-              <BadgesSection badges={badges} />
-            </motion.div>
+              {/* Badges Section */}
+              <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+                <BadgesSection badges={badges} />
+              </div>
 
-            {/* Adventure Timeline */}
-            <motion.div
-              initial={{ y: 30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.6 }}
-            >
-              <AdventureTimeline visits={visits} totalVisits={stats.totalVisits} />
-            </motion.div>
-          </motion.div>
+              {/* Adventure Timeline */}
+              <div className="animate-fade-in" style={{ animationDelay: '150ms' }}>
+                <AdventureTimeline visits={visits} totalVisits={stats.totalVisits} />
+              </div>
+            </div>
 
-          {/* Right Column - Stats */}
-          <motion.div variants={slideInFromRight} className="space-y-4 sm:space-y-6">
-            {/* Quick Stats */}
-            <QuickStats stats={stats} />
+            {/* Right Column - Stats & Milestones */}
+            <div className="space-y-4 sm:space-y-6">
+              
+              {/* Quick Stats */}
+              <div className="animate-fade-in" style={{ animationDelay: '75ms' }}>
+                <QuickStats stats={stats} />
+              </div>
 
-            {/* Next Milestone */}
-            <MilestoneCard milestone={milestoneData} />
+              {/* Next Milestone */}
+              <div className="animate-fade-in" style={{ animationDelay: '125ms' }}>
+                <MilestoneCard milestone={milestoneData} />
+              </div>
 
-            {/* Account Stats */}
-            <AccountStats stats={stats} />
-          </motion.div>
-        </motion.div>
+              {/* Account Stats */}
+              <div className="animate-fade-in" style={{ animationDelay: '175ms' }}>
+                <AccountStats stats={stats} />
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
-    </AnimatedPage>
+
+      {/* QR Scanner Modal */}
+      {showScanModal && (
+        <Modal
+          isOpen={showScanModal}
+          onClose={() => setShowScanModal(false)}
+          title="Scan QR Code"
+          size="lg"
+        >
+          <QRScanner
+            onScanSuccess={(qrCode) => handleScanSuccess(qrCode, destinations)}
+            onClose={() => setShowScanModal(false)}
+          />
+        </Modal>
+      )}
+
+      {/* Check-In Review Modal */}
+      {showReviewModal && checkInDestination && (
+        <Modal
+          isOpen={showReviewModal}
+          onClose={() => {
+            setShowReviewModal(false);
+            resetCheckIn();
+          }}
+          title="Check-In Review"
+          size="lg"
+        >
+          <CheckInReview
+            destination={checkInDestination}
+            qrCode={scannedQRCode}
+            onSubmit={handleReviewSubmit}
+            onCancel={() => {
+              setShowReviewModal(false);
+              resetCheckIn();
+            }}
+          />
+        </Modal>
+      )}
+    </div>
   );
-};
+});
+
+UserDashboard.displayName = 'UserDashboard';
 
 export default UserDashboard;

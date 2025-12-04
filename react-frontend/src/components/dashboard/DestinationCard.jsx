@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { MapPin, Users, Eye, Edit, Trash2 } from 'lucide-react';
 
 const DestinationCard = ({ 
   title, 
@@ -7,76 +8,179 @@ const DestinationCard = ({
   categoryIcon,
   description, 
   points, 
-  location, 
+  location,
+  street,
+  barangay, 
   rating,
+  image_url,
+  latitude,
+  longitude,
+  visitors,
   onView,
   onEdit,
   onDelete 
 }) => {
+  const [imageError, setImageError] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationStatus, setLocationStatus] = useState('loading'); // loading, success, error
+  
+  // Get user's location with timeout
+  React.useEffect(() => {
+    // Check if location is already cached in sessionStorage
+    const cachedLocation = sessionStorage.getItem('userLocation');
+    if (cachedLocation) {
+      const parsed = JSON.parse(cachedLocation);
+      setUserLocation(parsed);
+      setLocationStatus('success');
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      setLocationStatus('error');
+      return;
+    }
+
+    // Set timeout for 3 seconds
+    const timeoutId = setTimeout(() => {
+      if (!userLocation) {
+        setLocationStatus('error');
+      }
+    }, 3000);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const location = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        setUserLocation(location);
+        setLocationStatus('success');
+        // Cache location in sessionStorage for 5 minutes
+        sessionStorage.setItem('userLocation', JSON.stringify(location));
+        clearTimeout(timeoutId);
+      },
+      () => {
+        setLocationStatus('error');
+        clearTimeout(timeoutId);
+      },
+      { timeout: 3000, maximumAge: 300000 } // 3 second timeout, 5 min cache
+    );
+
+    return () => clearTimeout(timeoutId);
+  }, []);
+  
+  // Calculate distance between two points using Haversine formula
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+  
+  const deg2rad = (deg) => deg * (Math.PI/180);
+  
+  // Get distance text
+  const getDistance = () => {
+    if (locationStatus === 'error' || !latitude || !longitude) {
+      return 'Distance N/A';
+    }
+    if (locationStatus === 'loading' || !userLocation) {
+      return 'Calculating...';
+    }
+    const distance = calculateDistance(userLocation.lat, userLocation.lng, latitude, longitude);
+    return `${distance.toFixed(1)}km away`;
+  };
+  
+  // Get image URL - use database image or default
+  const getImageUrl = () => {
+    if (imageError || !image_url) {
+      return 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800';
+    }
+    // If image_url starts with http, use it directly, otherwise prepend base URL
+    if (image_url.startsWith('http')) {
+      return image_url;
+    }
+    // For local images from storage
+    const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:8000' : `http://${window.location.hostname}:8000`;
+    return `${baseUrl}/storage/${image_url}`;
+  };
+
   return (
-    <div className="group bg-white rounded-lg shadow-sm p-6 border border-slate-100 hover:shadow-md transition-all relative">
-      {/* Hover Actions - Top Right */}
-      <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={onView}
-          className="p-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors shadow-md"
-          title="View"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-          </svg>
-        </button>
-        <button
-          onClick={onEdit}
-          className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-md"
-          title="Edit"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-        </button>
-        <button
-          onClick={onDelete}
-          className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-md"
-          title="Delete"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
-      </div>
-      
-      {/* Title */}
-      <h3 className="text-xl font-bold text-slate-900 mb-3">{title}</h3>
-      
-      {/* Category Badge */}
-      <div className="mb-4">
-        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${categoryColor}`}>
-          <span>{categoryIcon}</span>
-          <span>{category}</span>
-        </span>
+    <div className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100">
+      {/* Image */}
+      <div className="relative h-48 overflow-hidden">
+        <img 
+          src={getImageUrl()}
+          alt={title}
+          onError={() => setImageError(true)}
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+          loading="lazy"
+        />
+        
+        {/* Points Badge */}
+        <div className="absolute top-3 right-3 bg-teal-600 text-white px-3 py-1.5 rounded-full text-sm font-semibold shadow-lg">
+          +{points} pts
+        </div>
+
+        {/* Category Badge */}
+        <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-medium text-gray-700 shadow-md">
+          {categoryIcon} {category}
+        </div>
       </div>
 
-      {/* Description */}
-      <p className="text-slate-600 text-sm mb-4">{description}</p>
+      {/* Content */}
+      <div className="p-4 space-y-3">
+        {/* Title */}
+        <h3 className="text-lg font-semibold text-gray-900 line-clamp-1 group-hover:text-teal-600 transition-colors">
+          {title}
+        </h3>
 
-      {/* Details */}
-      <div className="space-y-2 mb-6">
-        <div className="flex items-center justify-between">
-          <span className="text-slate-500 text-sm">Points:</span>
-          <span className="text-purple-600 font-bold">{points}</span>
+        {/* Location */}
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <MapPin className="w-4 h-4 text-teal-600 flex-shrink-0" />
+          <span className="line-clamp-1">{location}</span>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-slate-500 text-sm">Location:</span>
-          <span className="text-slate-900 text-sm font-semibold">{location}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-slate-500 text-sm">Rating:</span>
-          <div className="flex items-center gap-1">
-            <span className="text-yellow-500 text-lg">⭐</span>
-            <span className="text-slate-900 text-sm font-bold">{rating}</span>
+
+        {/* Stats */}
+        <div className="flex items-center gap-4 pt-2 border-t border-gray-100">
+          <div className="flex items-center gap-1.5 text-sm text-gray-600">
+            <Users className="w-4 h-4 text-teal-600" />
+            <span>{(visitors || 0).toLocaleString()}</span>
           </div>
+          <div className="flex items-center gap-1 text-sm text-gray-600">
+            <span className="text-amber-500">📍</span>
+            <span>{getDistance()}</span>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-2 pt-2">
+          <button
+            onClick={onView}
+            className="flex-1 bg-gray-900 hover:bg-teal-600 text-white py-2.5 rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"
+          >
+            <Eye className="w-4 h-4" />
+            View
+          </button>
+          <button
+            onClick={onEdit}
+            className="p-2.5 bg-gray-100 hover:bg-teal-100 text-gray-700 hover:text-teal-600 rounded-lg transition-colors"
+            title="Edit"
+          >
+            <Edit className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-2.5 bg-gray-100 hover:bg-red-100 text-gray-700 hover:text-red-600 rounded-lg transition-colors"
+            title="Delete"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>

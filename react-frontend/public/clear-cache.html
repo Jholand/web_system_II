@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clearing Cache - TravelQuest</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #10b981 0%, #0d9488 100%);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            text-align: center;
+            max-width: 500px;
+        }
+        h1 { color: #10b981; margin-bottom: 20px; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #10b981;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .success { color: #10b981; font-weight: bold; font-size: 24px; }
+        .info { color: #666; margin-top: 20px; }
+        button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        button:hover { background: #0d9488; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 TravelQuest Cache Cleaner</h1>
+        <div class="loader"></div>
+        <p id="status">Clearing old cache...</p>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Clear ALL localStorage cache
+        const keysToRemove = [
+            'user_badges_cache',
+            'user_checkins_5',
+            'user_checkins_10',
+            'user_checkins_20',
+            'user_stats_cache',
+            'cached_user_badges',
+            'cached_recent_checkins',
+            'cached_map_destinations',
+            'cached_destination_categories',
+            'cached_saved_destinations',
+            'travelquest_categories_cache'
+        ];
+
+        let cleared = 0;
+        setTimeout(() => {
+            keysToRemove.forEach(key => {
+                if (localStorage.getItem(key)) {
+                    localStorage.removeItem(key);
+                    cleared++;
+                }
+            });
+
+            document.querySelector('.loader').style.display = 'none';
+            document.getElementById('status').innerHTML = '<div class="success">✅ Cache Cleared!</div>';
+            document.getElementById('result').innerHTML = `
+                <p class="info">Removed ${cleared} cached items</p>
+                <p class="info">Your data will now load fresh from the database</p>
+                <button onclick="window.location.href='/user/dashboard'">Go to Dashboard</button>
+            `;
+        }, 2000);
+    </script>
+</body>
+</html>

@@ -20,8 +20,7 @@ class DatabaseSeeder extends Seeder
             DestinationCategorySeeder::class,
             RewardCategorySeeder::class,
             BadgeCategorySeeder::class,
-            DestinationStatusSeeder::class,
-            DestinationAmenitySeeder::class,
+            AdminUserSeeder::class, // Add admin and test users
         ]);
 
         // Optionally create a test user

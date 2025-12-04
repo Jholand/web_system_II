@@ -36,13 +36,13 @@ const Pagination = ({
     <div className="bg-white border-t border-slate-200 px-4 py-4 rounded-b-xl">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         {/* Items per page and showing info */}
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-slate-600 font-medium">Show:</span>
+            <span className="text-slate-600">Show:</span>
             <select
               value={itemsPerPage}
               onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
-              className="px-3 py-1.5 border border-slate-300 rounded-lg text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white"
+              className="px-2 py-1 border border-slate-300 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 bg-white"
             >
               <option value={6}>6</option>
               <option value={9}>9</option>
@@ -51,9 +51,9 @@ const Pagination = ({
             </select>
           </div>
           <span className="text-slate-600">
-            Showing <span className="font-semibold text-slate-900">{startItem}</span> to{' '}
-            <span className="font-semibold text-slate-900">{endItem}</span> of{' '}
-            <span className="font-semibold text-slate-900">{totalItems}</span> results
+            Showing <span className="font-medium text-slate-900">{startItem}</span> to{' '}
+            <span className="font-medium text-slate-900">{endItem}</span> of{' '}
+            <span className="font-medium text-slate-900">{totalItems}</span> results
           </span>
         </div>
 
@@ -63,13 +63,13 @@ const Pagination = ({
           <button
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            className={`px-3 py-2 rounded-lg font-medium transition-all ${
+            className={`px-2 py-1.5 rounded-lg transition-all ${
               currentPage === 1
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                : 'bg-white border border-slate-300 text-slate-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-600'
+                : 'bg-white border border-slate-300 text-slate-700 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-600'
             }`}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
@@ -80,12 +80,12 @@ const Pagination = ({
               key={index}
               onClick={() => typeof page === 'number' && onPageChange(page)}
               disabled={page === '...'}
-              className={`min-w-[40px] px-3 py-2 rounded-lg font-semibold transition-all ${
+              className={`min-w-[32px] px-2 py-1.5 rounded-lg text-xs transition-all ${
                 page === currentPage
-                  ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-md'
+                  ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-sm'
                   : page === '...'
                   ? 'bg-transparent text-slate-400 cursor-default'
-                  : 'bg-white border border-slate-300 text-slate-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-600'
+                  : 'bg-white border border-slate-300 text-slate-700 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-600'
               }`}
             >
               {page}
@@ -96,13 +96,13 @@ const Pagination = ({
           <button
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className={`px-3 py-2 rounded-lg font-medium transition-all ${
+            className={`px-2 py-1.5 rounded-lg transition-all ${
               currentPage === totalPages
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                : 'bg-white border border-slate-300 text-slate-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-600'
+                : 'bg-white border border-slate-300 text-slate-700 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-600'
             }`}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>

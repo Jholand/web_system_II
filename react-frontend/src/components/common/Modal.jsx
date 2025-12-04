@@ -29,57 +29,55 @@ const Modal = ({
     md: 'w-full sm:max-w-2xl',
     lg: 'w-full sm:max-w-4xl',
     xl: 'w-full sm:max-w-6xl',
+    '2xl': 'w-full sm:max-w-7xl',
   };
 
   return (
     <AnimatePresence mode="wait">
       {isOpen && (
-        <div className="fixed inset-0 z-[9999] overflow-y-auto bg-black/70">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-hidden">
           {/* Backdrop */}
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: "easeInOut" }}
-            className="fixed inset-0 backdrop-blur-sm"
+            className="fixed inset-0 bg-black/50 backdrop-blur-md"
             onClick={onClose}
           />
 
           {/* Modal */}
-          <div className="flex min-h-full items-center justify-center p-2 sm:p-4">
-            <motion.div 
-              variants={modalVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              className={`relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl ${sizes[size]} mx-2 sm:mx-0`}
-              onClick={(e) => e.stopPropagation()}
-            >
+          <motion.div 
+            variants={modalVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className={`relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl ${sizes[size]} max-h-[95vh] flex flex-col`}
+            onClick={(e) => e.stopPropagation()}
+          >
               {/* Header */}
-              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white rounded-t-2xl sm:rounded-t-3xl">
-                <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-200 bg-white rounded-t-3xl flex-shrink-0">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
                   {titleIcon && (
                     <motion.div 
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-                      className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-teal-400 to-teal-600 rounded-lg shadow-md flex-shrink-0"
+                      className="flex items-center justify-center w-10 h-10 bg-gradient-to-br from-teal-400 to-teal-600 rounded-xl shadow-md flex-shrink-0"
                     >
-                      <div className="text-white text-sm sm:text-base">
+                      <div className="text-white">
                         {titleIcon}
                       </div>
                     </motion.div>
                   )}
-                  <h3 className="text-base sm:text-xl font-bold text-slate-900 truncate">{title}</h3>
+                  <h3 className="text-xl font-normal text-slate-900 truncate">{title}</h3>
                 </div>
                 {showCloseButton && (
                   <button
                     onClick={onClose}
-                    className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-slate-100 text-slate-800 hover:text-slate-900 hover:bg-slate-200 hover:scale-110 rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all duration-200 active:scale-95 flex-shrink-0 ml-2"
-                  >X
-                    <svg className="w-5 h-5 sm:w-6 sm:h-6 stroke-current" fill="none" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    className="flex items-center justify-center w-8 h-8 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all duration-200 flex-shrink-0 ml-2 font-medium text-lg shadow-sm border border-slate-200"
+                  >
+                    X
                   </button>
                 )}
               </div>
@@ -89,7 +87,11 @@ const Modal = ({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.1 }}
-                className="p-4 sm:p-6 max-h-[calc(100vh-200px)] sm:max-h-[calc(100vh-250px)] overflow-y-auto"
+                className="flex-1 overflow-y-auto bg-white p-4 sm:p-6"
+                style={{
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: '#cbd5e1 #f1f5f9'
+                }}
               >
                 {children}
               </motion.div>
@@ -100,13 +102,12 @@ const Modal = ({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.2 }}
-                  className="flex items-center justify-end gap-2 sm:gap-3 p-4 sm:p-6 border-t border-slate-200 bg-gradient-to-r from-slate-50 to-white rounded-b-2xl sm:rounded-b-3xl flex-wrap"
+                  className="flex items-center justify-end gap-3 p-4 sm:p-6 border-t border-slate-200 bg-white rounded-b-3xl flex-shrink-0"
                 >
                   {footer}
                 </motion.div>
               )}
             </motion.div>
-          </div>
         </div>
       )}
     </AnimatePresence>

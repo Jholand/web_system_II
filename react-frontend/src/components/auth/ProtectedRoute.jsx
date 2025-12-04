@@ -1,29 +1,48 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import toast from 'react-hot-toast';
 
-const ProtectedRoute = ({ children, requireAdmin = false }) => {
-  const { isAuthenticated, isAdmin, loading } = useAuth();
+const ProtectedRoute = ({ children, requiredRole = null }) => {
+  const { user, isAuthenticated, loading } = useAuth();
+  const location = useLocation();
 
+  // Show loading state while checking authentication
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
-          <p className="mt-4 text-slate-600">Loading...</p>
+          <p className="mt-4 text-slate-600 font-medium">Verifying access...</p>
         </div>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+  // Not authenticated - redirect to home
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/" state={{ from: location, message: 'Please login to access this page' }} replace />;
   }
 
-  if (requireAdmin && !isAdmin) {
-    return <Navigate to="/map" replace />;
+  // Check user status - only active users can access
+  if (user.status !== 'active') {
+    return <Navigate to="/" state={{ message: 'Your account is not active' }} replace />;
   }
 
+  // Check role-based access if required
+  if (requiredRole) {
+    if (requiredRole === 'admin' && user.role !== 'admin') {
+      // User trying to access admin routes - redirect to user dashboard
+      return <Navigate to="/user/dashboard" state={{ message: 'Access denied. Admin privileges required.' }} replace />;
+    }
+    
+    if (requiredRole === 'user' && user.role !== 'user') {
+      // Admin trying to access user routes - redirect to admin dashboard
+      return <Navigate to="/admin/dashboard" state={{ message: 'Access denied. User access only.' }} replace />;
+    }
+  }
+
+  // All checks passed - render the protected component
   return children;
 };
 

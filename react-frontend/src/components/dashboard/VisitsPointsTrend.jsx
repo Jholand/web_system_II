@@ -1,80 +1,150 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-const VisitsPointsTrend = () => {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-  const pointsData = [22, 32, 45, 50, 62, 82];
-  const visitsData = [0, 0, 0, 0, 0, 0];
+const VisitsPointsTrend = ({ data, currentPeriod }) => {
+  const [period, setPeriod] = useState(currentPeriod || 'daily');
+  const [chartData, setChartData] = useState(null);
 
-  const maxValue = 90;
+  useEffect(() => {
+    setPeriod(currentPeriod || 'daily');
+  }, [currentPeriod]);
+
+  useEffect(() => {
+    if (data && data[period]) {
+      const chartData = data[period].chart_data;
+      if (chartData && chartData.labels && chartData.labels.length > 0) {
+        const formattedData = chartData.labels.map((label, index) => ({
+          name: label,
+          visits: chartData.checkins[index] || 0,
+          points: chartData.points[index] || 0,
+        }));
+        setChartData(formattedData);
+      }
+    }
+  }, [data, period]);
+
+  if (!chartData || chartData.length === 0) {
+    return null;
+  }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6 border border-slate-100">
-      <div className="mb-6">
-        <h3 className="text-xl font-bold text-slate-900 mb-1">Visits & Points Trend</h3>
-        <p className="text-slate-500 text-sm font-medium">Last 6 months performance</p>
-      </div>
-
-      <div className="relative h-64">
-        {/* Grid lines */}
-        <div className="absolute inset-0 flex flex-col justify-between">
-          {[80000, 60000, 40000, 20000, 0].map((value, i) => (
-            <div key={i} className="flex items-center">
-              <span className="text-xs text-slate-500 font-medium w-12">{value}</span>
-              <div className="flex-1 h-px bg-slate-200 ml-2"></div>
-            </div>
-          ))}
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-white/60">
+      {/* Header with period buttons */}
+      <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-bold bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent mb-1">
+            Visits & Points Trend
+          </h3>
+          <p className="text-slate-500 text-sm font-medium">{chartData.period_label}</p>
         </div>
-
-        {/* Chart content */}
-        <div className="absolute inset-0 flex items-end justify-around pl-14 pr-4 pb-8">
-          {months.map((month, i) => (
-            <div key={month} className="flex flex-col items-center flex-1">
-              <div className="relative w-full h-full">
-                {/* Orange line for points */}
-                {i > 0 && (
-                  <svg className="absolute inset-0 w-full h-full overflow-visible">
-                    <line
-                      x1="0%"
-                      y1={`${100 - (pointsData[i - 1] / maxValue) * 100}%`}
-                      x2="100%"
-                      y2={`${100 - (pointsData[i] / maxValue) * 100}%`}
-                      stroke="#f59e0b"
-                      strokeWidth="2"
-                    />
-                  </svg>
-                )}
-                {/* Data point */}
-                <div
-                  className="absolute left-1/2 transform -translate-x-1/2"
-                  style={{ bottom: `${(pointsData[i] / maxValue) * 100}%` }}
-                >
-                  <div className="w-2 h-2 bg-orange-500 rounded-full border-2 border-white"></div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* X-axis labels */}
-        <div className="absolute bottom-0 left-14 right-4 flex justify-around">
-          {months.map((month) => (
-            <span key={month} className="text-xs text-gray-500">
-              {month}
-            </span>
-          ))}
+        
+        {/* Period selector buttons */}
+        <div className="flex gap-2 bg-gradient-to-r from-teal-50 to-cyan-50 p-1 rounded-xl shadow-inner border border-teal-100">
+          <button
+            onClick={() => setPeriod('daily')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150 ${
+              period === 'daily'
+                ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg shadow-teal-500/40 scale-105'
+                : 'text-teal-700 hover:text-teal-900 hover:bg-white/60'
+            }`}
+          >
+            Daily
+          </button>
+          <button
+            onClick={() => setPeriod('monthly')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150 ${
+              period === 'monthly'
+                ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg shadow-teal-500/40 scale-105'
+                : 'text-teal-700 hover:text-teal-900 hover:bg-white/60'
+            }`}
+          >
+            Monthly
+          </button>
+          <button
+            onClick={() => setPeriod('yearly')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150 ${
+              period === 'yearly'
+                ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg shadow-teal-500/40 scale-105'
+                : 'text-teal-700 hover:text-teal-900 hover:bg-white/60'
+            }`}
+          >
+            Yearly
+          </button>
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-6 mt-4">
-        <div className="flex items-center gap-2">
-          <span className="text-orange-500">◆</span>
-          <span className="text-sm text-gray-600">Points (+1000)</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-emerald-500">◆</span>
-          <span className="text-sm text-gray-600">Visits</span>
-        </div>
+      {/* Chart */}
+      <div className="h-80 relative">
+        <ResponsiveContainer width="100%" height="100%" minHeight={320}>
+          <LineChart 
+            data={chartData}
+            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+          >
+            <defs>
+              <linearGradient id="colorCheckins" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+              </linearGradient>
+              <linearGradient id="colorPoints" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.5} />
+            <XAxis 
+              dataKey="name" 
+              stroke="#64748b"
+              style={{ fontSize: '12px', fontWeight: '500' }}
+            />
+            <YAxis 
+              yAxisId="left"
+              stroke="#10b981"
+              style={{ fontSize: '12px', fontWeight: '500' }}
+            />
+            <YAxis 
+              yAxisId="right"
+              orientation="right"
+              stroke="#f59e0b"
+              style={{ fontSize: '12px', fontWeight: '500' }}
+            />
+            <Tooltip 
+              contentStyle={{
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                border: 'none',
+                borderRadius: '12px',
+                boxShadow: '0 10px 40px rgba(0, 0, 0, 0.1)',
+                padding: '12px'
+              }}
+              labelStyle={{ fontWeight: '600', color: '#1e293b', marginBottom: '4px' }}
+            />
+            <Legend 
+              wrapperStyle={{ paddingTop: '20px' }}
+              iconType="circle"
+            />
+            <Line 
+              yAxisId="left"
+              type="monotone" 
+              dataKey="visits" 
+              name="Check-ins"
+              stroke="#10b981"
+              strokeWidth={3}
+              dot={{ r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
+              activeDot={{ r: 7, fill: '#10b981', stroke: '#fff', strokeWidth: 3 }}
+              isAnimationActive={false}
+            />
+            <Line 
+              yAxisId="right"
+              type="monotone" 
+              dataKey="points" 
+              name="Points"
+              stroke="#f59e0b"
+              strokeWidth={3}
+              dot={{ r: 5, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }}
+              activeDot={{ r: 7, fill: '#f59e0b', stroke: '#fff', strokeWidth: 3 }}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

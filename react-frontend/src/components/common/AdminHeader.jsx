@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UserCircle, LogOut, Shield } from 'lucide-react';
+import { Search, Bell, Moon } from 'lucide-react';
 import Button from './Button';
 
-const AdminHeader = ({ admin, onLogout }) => {
+const AdminHeader = ({ admin, onLogout, searchQuery, onSearchChange, sidebarCollapsed }) => {
   const [showLogout, setShowLogout] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -19,77 +19,66 @@ const AdminHeader = ({ admin, onLogout }) => {
   }, []);
 
   return (
-    <header className="fixed top-0 left-0 right-0 bg-white shadow-md border-b border-slate-200 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
-        {/* Logo Section */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
-            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900">TravelQuest</h1>
-            <p className="text-xs text-purple-600 font-medium flex items-center gap-1">
-              <Shield className="w-3 h-3" />
-              Admin Portal
-            </p>
-          </div>
+    <header className={`fixed top-0 right-0 bg-white border-b border-gray-200 z-40 transition-all duration-150 ${sidebarCollapsed ? 'left-20' : 'left-64'}`}>
+      <div className="px-6 py-3.5 flex items-center justify-between">
+        {/* Left: Page Title */}
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Explore Destinations</h1>
         </div>
 
-        {/* Admin Profile Section */}
-        <div 
-          className="flex items-center gap-3 sm:gap-4 relative"
-          ref={dropdownRef}
-        >
-          <button
-            onClick={() => setShowLogout(!showLogout)}
-            className="flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-purple-50 to-purple-100 hover:from-purple-100 hover:to-purple-200 rounded-xl px-3 sm:px-4 py-2 transition-all duration-200 border border-purple-200 shadow-sm hover:shadow-md group"
-          >
-            {/* Avatar */}
-            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-              <UserCircle className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-            </div>
-            {/* Admin Info */}
-            <div className="text-left hidden sm:block">
-              <p className="text-sm font-bold text-slate-900">{admin?.name || 'Admin'}</p>
-              <p className="text-xs text-purple-600 font-medium">Administrator</p>
-            </div>
-            {/* Dropdown Arrow */}
-            <motion.svg 
-              animate={{ rotate: showLogout ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-              className="w-4 h-4 text-purple-600 hidden sm:block" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </motion.svg>
+        {/* Right: Search + Icons + Profile */}
+        <div className="flex items-center gap-3">
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchQuery || ''}
+              onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
+              className="pl-10 pr-4 py-2 w-64 bg-gray-50 border-0 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all"
+            />
+          </div>
+
+          {/* Notification Bell */}
+          <button className="relative w-10 h-10 flex items-center justify-center bg-white border border-gray-200 hover:border-teal-500 rounded-lg transition-all">
+            <Bell className="w-5 h-5 text-gray-600" />
+            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
           </button>
-          
-          <AnimatePresence>
-            {showLogout && (
-              <motion.div
-                initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                transition={{ duration: 0.2 }}
-                className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-purple-100 p-2 min-w-[200px] z-50"
-              >
-                <Button 
-                  variant="outline" 
-                  size="md" 
-                  onClick={onLogout} 
-                  icon={<LogOut className="w-4 h-4 sm:w-5 sm:h-5" />}
-                  className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+
+          {/* Dark Mode Toggle */}
+          <button className="w-10 h-10 flex items-center justify-center bg-white border border-gray-200 hover:border-teal-500 rounded-lg transition-all">
+            <Moon className="w-5 h-5 text-gray-600" />
+          </button>
+
+          {/* Profile Button */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowLogout(!showLogout)}
+              className="w-10 h-10 bg-white border-2 border-gray-200 hover:border-teal-500 rounded-lg flex items-center justify-center transition-all"
+            >
+              <span className="text-gray-700 font-semibold text-sm">U</span>
+            </button>
+            
+            <AnimatePresence>
+              {showLogout && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden min-w-[140px] z-50"
                 >
-                  Logout
-                </Button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  <button
+                    onClick={onLogout}
+                    className="w-full px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    Logout
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </header>

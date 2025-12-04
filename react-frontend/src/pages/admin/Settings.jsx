@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { tabSlide } from '../../utils/animations';
@@ -9,62 +9,233 @@ import DashboardTabs from '../../components/dashboard/DashboardTabs';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import ToastNotification from '../../components/common/ToastNotification';
+import axios from 'axios';
 
-const Settings = () => {
+// Auto-detect API URL for mobile access
+const getApiUrl = () => {
+  const hostname = window.location.hostname;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:8000/api';
+  }
+  return `http://${hostname}:8000/api`;
+};
+
+const API_BASE_URL = getApiUrl();
+
+// Configure axios to send credentials with every request
+axios.defaults.withCredentials = true;
+
+const Settings = React.memo(() => {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('account');
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState(''); // 'edit', 'add', 'delete'
   const [selectedAdmin, setSelectedAdmin] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    password: '',
+    status_id: 1
+  });
 
-  // Current logged-in admin
-  const currentAdmin = {
-    id: 1,
-    name: 'em',
-    email: 'admin@travelquest.com',
-    role: 'Administrator',
-    phone: '+63 912 345 6789',
-    joinedDate: 'January 15, 2024',
-  };
+  // Password change state
+  const [passwordData, setPasswordData] = useState({
+    current_password: '',
+    new_password: '',
+    new_password_confirmation: ''
+  });
+
+  // Current logged-in admin (from AuthContext or localStorage)
+  const [currentAdmin, setCurrentAdmin] = useState({
+    id: null,
+    name: 'Loading...',
+    email: '',
+    role: '',
+    phone: '',
+    joinedDate: ''
+  });
 
   // Other admin accounts
-  const [adminAccounts, setAdminAccounts] = useState([
-    {
-      id: 2,
-      name: 'John Doe',
-      email: 'john@travelquest.com',
-      role: 'Administrator',
-      status: 'Active',
-      lastLogin: '2 hours ago',
-    },
-    {
-      id: 3,
-      name: 'Jane Smith',
-      email: 'jane@travelquest.com',
-      role: 'Moderator',
-      status: 'Active',
-      lastLogin: '1 day ago',
-    },
-  ]);
+  const [adminAccounts, setAdminAccounts] = useState([]);
+
+  // Fetch current admin info and admin accounts on mount
+  useEffect(() => {
+    const loadInitialData = async () => {
+      // Load from cache first for instant display
+      const userData = localStorage.getItem('user_data');
+      const cachedAdmins = localStorage.getItem('cached_admin_users');
+      
+      if (userData) {
+        try {
+          const user = JSON.parse(userData);
+          setCurrentAdmin({
+            id: user.id,
+            name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.name || 'Admin',
+            email: user.email,
+            role: user.role_id === 1 ? 'Administrator' : 'User',
+            phone: user.phone || 'Not set',
+            joinedDate: user.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Unknown',
+          });
+        } catch (e) {}
+      }
+      
+      if (cachedAdmins) {
+        try {
+          const parsed = JSON.parse(cachedAdmins);
+          const cacheAge = Date.now() - (parsed.timestamp || 0);
+          if (parsed.data && cacheAge < 300000) { // 5 min cache
+            setAdminAccounts(parsed.data);
+          }
+        } catch (e) {}
+      }
+      
+      // Fetch fresh data in background - don't await
+      Promise.all([
+        fetchCurrentAdmin(),
+        fetchAdmins()
+      ]).catch(err => console.error('Background fetch error:', err));
+    };
+    
+    loadInitialData();
+  }, []);
+
+  const fetchCurrentAdmin = async () => {
+    try {
+      // Fetch fresh data from API
+      const response = await axios.get(`${API_BASE_URL}/user`);
+      if (response.data) {
+        const user = response.data;
+        const adminData = {
+          id: user.id,
+          name: `${user.first_name} ${user.last_name}`,
+          email: user.email,
+          role: user.role_id === 1 ? 'Administrator' : 'User',
+          phone: user.phone || 'Not set',
+          joinedDate: user.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Unknown',
+        };
+        setCurrentAdmin(adminData);
+      }
+    } catch (error) {
+      console.error('Error fetching current admin:', error);
+      if (error.response?.status === 401) {
+        toast.error('Session expired. Please login again.');
+        navigate('/login');
+      }
+    }
+  };
+
+  const fetchAdmins = async () => {
+    try {
+      // Don't set loading for initial load since we have initialLoading
+      if (!initialLoading) {
+        setLoading(true);
+      }
+      const response = await axios.get(`${API_BASE_URL}/admin/users`);
+      if (response.data.success) {
+        setAdminAccounts(response.data.data);
+        // Cache the data
+        localStorage.setItem('cached_admin_users', JSON.stringify({
+          data: response.data.data,
+          timestamp: Date.now()
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching admins:', error);
+      if (error.response?.status === 401) {
+        toast.error('Session expired. Please login again.');
+        navigate('/login');
+        return;
+      }
+      toast.error('Failed to load admin accounts');
+    } finally {
+      if (!initialLoading) {
+        setLoading(false);
+      }
+    }
+  };
 
   const handleEditProfile = () => {
     toast.success('Profile updated successfully!');
   };
 
-  const handleChangePassword = () => {
-    toast.success('Password changed successfully!');
+  const handleChangePassword = async () => {
+    try {
+      // Validate password fields
+      if (!passwordData.current_password) {
+        toast.error('Please enter your current password');
+        return;
+      }
+      if (!passwordData.new_password) {
+        toast.error('Please enter a new password');
+        return;
+      }
+      if (passwordData.new_password.length < 8) {
+        toast.error('New password must be at least 8 characters');
+        return;
+      }
+      if (passwordData.new_password !== passwordData.new_password_confirmation) {
+        toast.error('New passwords do not match');
+        return;
+      }
+
+      setLoading(true);
+
+      const response = await axios.put(`${API_BASE_URL}/admin/change-password`, {
+        current_password: passwordData.current_password,
+        password: passwordData.new_password,
+        password_confirmation: passwordData.new_password_confirmation
+      });
+
+      if (response.data.success) {
+        toast.success('Password changed successfully!');
+        // Clear password fields
+        setPasswordData({
+          current_password: '',
+          new_password: '',
+          new_password_confirmation: ''
+        });
+      }
+    } catch (error) {
+      console.error('Error changing password:', error);
+      if (error.response?.status === 401) {
+        toast.error('Session expired. Please login again.');
+        navigate('/login');
+        return;
+      }
+      const errorMessage = error.response?.data?.message || 'Failed to change password';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAddAdmin = () => {
     setModalMode('add');
     setSelectedAdmin(null);
+    setFormData({
+      first_name: '',
+      last_name: '',
+      email: '',
+      password: '',
+      status_id: 1
+    });
     setShowModal(true);
   };
 
   const handleEditAdmin = (admin) => {
     setModalMode('edit');
     setSelectedAdmin(admin);
+    setFormData({
+      first_name: admin.first_name || '',
+      last_name: admin.last_name || '',
+      email: admin.email || '',
+      password: '',
+      status_id: admin.status_id || 1
+    });
     setShowModal(true);
   };
 
@@ -75,22 +246,87 @@ const Settings = () => {
   };
 
   const handleLogout = () => {
-    navigate('/login');
+    navigate('/');
   };
 
-  const handleModalSave = () => {
-    if (modalMode === 'add') {
-      toast.success('Admin added successfully!');
-    } else if (modalMode === 'edit') {
-      toast.success('Admin updated successfully!');
-    } else if (modalMode === 'delete') {
-      toast.success('Admin deleted successfully!');
+  const handleModalSave = async () => {
+    try {
+      setLoading(true);
+
+      if (modalMode === 'add') {
+        // Validate required fields
+        if (!formData.first_name || !formData.last_name || !formData.email || !formData.password) {
+          toast.error('Please fill in all required fields');
+          setLoading(false);
+          return;
+        }
+
+        const response = await axios.post(`${API_BASE_URL}/admin/users`, formData);
+        
+        if (response.data.success) {
+          toast.success('Admin added successfully!');
+          fetchAdmins(); // Refresh the list
+        }
+      } else if (modalMode === 'edit') {
+        // Validate required fields
+        if (!formData.first_name || !formData.last_name || !formData.email) {
+          toast.error('Please fill in all required fields');
+          setLoading(false);
+          return;
+        }
+
+        // Remove password if empty (optional in edit)
+        const updateData = { ...formData };
+        if (!updateData.password) {
+          delete updateData.password;
+        }
+
+        const response = await axios.put(
+          `${API_BASE_URL}/admin/users/${selectedAdmin.id}`,
+          updateData
+        );
+        
+        if (response.data.success) {
+          toast.success('Admin updated successfully!');
+          fetchAdmins(); // Refresh the list
+        }
+      } else if (modalMode === 'delete') {
+        const response = await axios.delete(
+          `${API_BASE_URL}/admin/users/${selectedAdmin.id}`
+        );
+        
+        if (response.data.success) {
+          toast.success('Admin deleted successfully!');
+          fetchAdmins(); // Refresh the list
+        }
+      }
+      
+      setShowModal(false);
+    } catch (error) {
+      console.error('Error saving admin:', error);
+      
+      if (error.response?.data?.errors) {
+        // Display validation errors
+        const errors = error.response.data.errors;
+        Object.values(errors).forEach(errorMessages => {
+          errorMessages.forEach(msg => toast.error(msg));
+        });
+      } else {
+        toast.error(error.response?.data?.message || 'An error occurred');
+      }
+    } finally {
+      setLoading(false);
     }
-    setShowModal(false);
   };
 
   return (
-    <AnimatedPage className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white relative pb-20 sm:pb-0">
+      {/* Decorative Background */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute top-20 left-10 w-72 h-72 bg-teal-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+        <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+      </div>
+      
       <ToastNotification />
       
       {/* Header */}
@@ -103,9 +339,9 @@ const Settings = () => {
 
       <main 
         className={`
+          relative z-10
           transition-all duration-300 ease-in-out
           ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
-          sm:ml-20 
           max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
         `}
       >
@@ -114,22 +350,32 @@ const Settings = () => {
           className="mb-8"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.2 }}
         >
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-slate-600 to-slate-700 rounded-xl flex items-center justify-center shadow-lg">
+            <div className="w-12 h-12 bg-gradient-to-br from-teal-600 to-cyan-700 rounded-xl flex items-center justify-center shadow-lg">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </div>
             <div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">Settings</h2>
-              <p className="text-xs sm:text-sm text-slate-600 mt-1">Manage your account and system preferences</p>
+              <h2 className="text-2xl font-semibold text-slate-900">Settings</h2>
+              <p className="text-sm text-slate-600 mt-1">Manage your account and system preferences</p>
             </div>
           </div>
         </motion.div>
 
+        {!currentAdmin.name && !adminAccounts.length ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="flex items-center justify-center py-32">
+              <div className="text-center space-y-4">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-teal-600 mx-auto"></div>
+                <p className="text-slate-600 text-lg">Loading settings...</p>
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           {/* Settings Tabs */}
           <div className="border-b border-slate-200 bg-slate-50 overflow-x-auto">
@@ -165,14 +411,14 @@ const Settings = () => {
             {activeTab === 'account' && (
               <div className="space-y-8">
                 <div>
-                  <h3 className="text-2xl font-bold text-slate-900 mb-6">Account Information</h3>
+                  <h3 className="text-xs font-medium text-slate-900 mb-6">Account Information</h3>
                   
                   <div className="flex items-start gap-6 mb-8">
-                    <div className="w-24 h-24 bg-gradient-to-br from-teal-400 to-blue-500 rounded-2xl flex items-center justify-center text-white text-4xl font-bold shadow-lg">
+                    <div className="w-24 h-24 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-2xl flex items-center justify-center text-white text-4xl font-bold shadow-lg">
                       {currentAdmin.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1">
-                      <h4 className="text-xl font-bold text-slate-900">{currentAdmin.name}</h4>
+                      <h4 className="text-xs font-medium text-slate-900">{currentAdmin.name}</h4>
                       <p className="text-slate-600">{currentAdmin.role}</p>
                       <p className="text-sm text-slate-500 mt-2">Member since {currentAdmin.joinedDate}</p>
                     </div>
@@ -180,7 +426,7 @@ const Settings = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                      <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                      <label className="flex items-center gap-2 text-sm font-normal text-slate-700 mb-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
@@ -194,7 +440,7 @@ const Settings = () => {
                     </div>
 
                     <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                      <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                      <label className="flex items-center gap-2 text-sm font-normal text-slate-700 mb-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                         </svg>
@@ -208,7 +454,7 @@ const Settings = () => {
                     </div>
 
                     <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                      <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                      <label className="flex items-center gap-2 text-sm font-normal text-slate-700 mb-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                         </svg>
@@ -222,7 +468,7 @@ const Settings = () => {
                     </div>
 
                     <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                      <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                      <label className="flex items-center gap-2 text-sm font-normal text-slate-700 mb-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                         </svg>
@@ -245,10 +491,10 @@ const Settings = () => {
                 </div>
 
                 <div className="border-t border-slate-200 pt-8">
-                  <h3 className="text-xl font-bold text-slate-900 mb-6">Change Password</h3>
+                  <h3 className="text-xs font-medium text-slate-900 mb-6">Change Password</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                      <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                      <label className="flex items-center gap-2 text-sm font-normal text-slate-700 mb-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                         </svg>
@@ -256,13 +502,15 @@ const Settings = () => {
                       </label>
                       <input
                         type="password"
+                        value={passwordData.current_password}
+                        onChange={(e) => setPasswordData({...passwordData, current_password: e.target.value})}
                         className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
                         placeholder="••••••••"
                       />
                     </div>
 
                     <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                      <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                      <label className="flex items-center gap-2 text-sm font-normal text-slate-700 mb-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                         </svg>
@@ -270,13 +518,15 @@ const Settings = () => {
                       </label>
                       <input
                         type="password"
+                        value={passwordData.new_password}
+                        onChange={(e) => setPasswordData({...passwordData, new_password: e.target.value})}
                         className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
                         placeholder="••••••••"
                       />
                     </div>
 
                     <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                      <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                      <label className="flex items-center gap-2 text-sm font-normal text-slate-700 mb-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                         </svg>
@@ -284,6 +534,8 @@ const Settings = () => {
                       </label>
                       <input
                         type="password"
+                        value={passwordData.new_password_confirmation}
+                        onChange={(e) => setPasswordData({...passwordData, new_password_confirmation: e.target.value})}
                         className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
                         placeholder="••••••••"
                       />
@@ -302,59 +554,76 @@ const Settings = () => {
             {activeTab === 'admins' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-2xl font-bold text-slate-900">Admin Accounts</h3>
+                  <h3 className="text-xs font-medium text-slate-900">Admin Accounts</h3>
                   <Button variant="primary" onClick={handleAddAdmin} icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>}>
                     Add Admin
                   </Button>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4">
-                  {adminAccounts.map((admin) => (
-                    <div key={admin.id} className="bg-slate-50 rounded-xl p-6 border border-slate-200 hover:border-teal-300 transition-all">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-500 rounded-xl flex items-center justify-center text-white text-xl font-bold shadow-lg">
-                            {admin.name.charAt(0).toUpperCase()}
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
+                  </div>
+                ) : adminAccounts.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500">
+                    No admin accounts found
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4">
+                    {adminAccounts.map((admin) => (
+                      <div key={admin.id} className="bg-slate-50 rounded-xl p-6 border border-slate-200 hover:border-teal-300 transition-all">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-xl flex items-center justify-center text-white text-xs font-medium shadow-lg">
+                              {admin.name?.charAt(0)?.toUpperCase() || admin.first_name?.charAt(0)?.toUpperCase() || 'A'}
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-medium text-slate-900">{admin.name}</h4>
+                              <p className="text-sm text-slate-600">{admin.email}</p>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="text-lg font-bold text-slate-900">{admin.name}</h4>
-                            <p className="text-sm text-slate-600">{admin.email}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-6">
-                          <div className="text-right">
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-teal-100 text-teal-700 mb-1">
-                              {admin.role}
-                            </span>
-                            <p className="text-xs text-slate-500">Last login: {admin.lastLogin}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button 
-                              variant="secondary" 
-                              size="sm" 
-                              onClick={() => handleEditAdmin(admin)}
-                              icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>}
-                            >
-                              Edit
-                            </Button>
-                            <Button 
-                              variant="danger" 
-                              size="sm" 
-                              onClick={() => handleDeleteAdmin(admin)}
-                              icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>}
-                            >
-                              Delete
-                            </Button>
+                          <div className="flex items-center gap-6">
+                            <div className="text-right">
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold mb-1 ${
+                                admin.status === 'active' || admin.status_id === 1 
+                                  ? 'bg-teal-100 text-teal-700' 
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}>
+                                {admin.role}
+                              </span>
+                              <p className="text-xs text-slate-500">
+                                {admin.last_login_at ? `Last login: ${new Date(admin.last_login_at).toLocaleDateString()}` : 'Never logged in'}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button 
+                                variant="secondary" 
+                                size="sm" 
+                                onClick={() => handleEditAdmin(admin)}
+                                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>}
+                              >
+                                <span className="hidden sm:inline">Edit</span>
+                              </Button>
+                              <Button 
+                                variant="danger" 
+                                size="sm" 
+                                onClick={() => handleDeleteAdmin(admin)}
+                                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>}
+                              >
+                                <span className="hidden sm:inline">Delete</span>
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
+        )}
       </main>
 
       {/* Admin Modal */}
@@ -370,7 +639,7 @@ const Settings = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-slate-900">Delete {selectedAdmin?.name}?</h3>
+            <h3 className="text-xs font-medium text-slate-900">Delete {selectedAdmin?.name}?</h3>
             <p className="text-slate-600">This action cannot be undone.</p>
             <div className="flex gap-3 pt-4">
               <Button variant="secondary" onClick={() => setShowModal(false)} className="flex-1">
@@ -388,66 +657,94 @@ const Settings = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-              <label className="block text-sm font-bold text-slate-700 mb-2">Full Name</label>
-              <input
-                type="text"
-                defaultValue={selectedAdmin?.name || ''}
-                className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
-                placeholder="John Doe"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                <label className="block text-sm font-normal text-slate-700 mb-2">First Name</label>
+                <input
+                  type="text"
+                  value={formData.first_name}
+                  onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                  className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
+                  placeholder="John"
+                />
+              </div>
+
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                <label className="block text-sm font-normal text-slate-700 mb-2">Last Name</label>
+                <input
+                  type="text"
+                  value={formData.last_name}
+                  onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                  className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
+                  placeholder="Doe"
+                />
+              </div>
             </div>
 
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-              <label className="block text-sm font-bold text-slate-700 mb-2">Email</label>
+              <label className="block text-sm font-normal text-slate-700 mb-2">Email</label>
               <input
                 type="email"
-                defaultValue={selectedAdmin?.email || ''}
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
                 placeholder="john@travelquest.com"
               />
             </div>
 
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-              <label className="block text-sm font-bold text-slate-700 mb-2">Role</label>
+              <label className="block text-sm font-normal text-slate-700 mb-2">Status</label>
               <select
-                defaultValue={selectedAdmin?.role || 'Moderator'}
+                value={formData.status_id}
+                onChange={(e) => setFormData({ ...formData, status_id: parseInt(e.target.value) })}
                 className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
               >
-                <option value="Administrator">Administrator</option>
-                <option value="Moderator">Moderator</option>
+                <option value={1}>Active</option>
+                <option value={2}>Inactive</option>
+                <option value={3}>Suspended</option>
+                <option value={4}>Banned</option>
               </select>
             </div>
 
-            {modalMode === 'add' && (
-              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                <label className="block text-sm font-bold text-slate-700 mb-2">Password</label>
-                <input
-                  type="password"
-                  className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
-                  placeholder="••••••••"
-                />
-              </div>
-            )}
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+              <label className="block text-sm font-normal text-slate-700 mb-2">
+                Password {modalMode === 'edit' && <span className="text-xs text-slate-500">(leave blank to keep current)</span>}
+              </label>
+              <input
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
+                placeholder="••••••••"
+              />
+            </div>
 
             <div className="flex gap-3 pt-4">
-              <Button variant="secondary" onClick={() => setShowModal(false)} className="flex-1">
+              <Button 
+                variant="secondary" 
+                onClick={() => setShowModal(false)} 
+                className="flex-1"
+                disabled={loading}
+              >
                 Cancel
               </Button>
               <Button 
                 variant="primary" 
                 onClick={handleModalSave} 
                 className="flex-1"
+                disabled={loading}
                 icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
               >
-                {modalMode === 'add' ? 'Add' : 'Save'}
+                {loading ? 'Saving...' : (modalMode === 'add' ? 'Add Admin' : 'Save Changes')}
               </Button>
             </div>
           </div>
         )}
       </Modal>
-    </AnimatedPage>
+    </div>
   );
-};
+});
+
+Settings.displayName = 'Settings';
 
 export default Settings;

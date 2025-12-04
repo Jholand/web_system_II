@@ -17,6 +17,15 @@ export const LocationProvider = ({ children }) => {
   const [watchId, setWatchId] = useState(null);
 
   useEffect(() => {
+    // Set default location IMMEDIATELY so map loads
+    setUserLocation({
+      latitude: 12.7426,
+      longitude: 121.4900,
+      accuracy: 5000, // 5km accuracy for fallback
+      isDefault: true,
+    });
+    
+    // Try to get real location in background
     startTracking();
     return () => stopTracking();
   }, []);
@@ -35,6 +44,7 @@ export const LocationProvider = ({ children }) => {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
+          isDefault: false,
         });
         setLocationError(null);
       },
@@ -42,33 +52,25 @@ export const LocationProvider = ({ children }) => {
         let errorMessage = '';
         switch(error.code) {
           case error.PERMISSION_DENIED:
-            errorMessage = 'Location access denied. Please enable location permissions.';
+            errorMessage = 'Location access denied. Using default location.';
             break;
           case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information unavailable.';
+            errorMessage = 'Location unavailable. Using default location.';
             break;
           case error.TIMEOUT:
-            errorMessage = 'Location request timed out.';
+            errorMessage = 'Location timeout. Using default location.';
             break;
           default:
-            errorMessage = 'An unknown error occurred.';
+            errorMessage = 'Location error. Using default location.';
         }
         setLocationError(errorMessage);
-        console.warn('Location error:', errorMessage);
-        
-        // Set a default location for development/testing (Manila, Philippines)
-        if (!userLocation) {
-          setUserLocation({
-            latitude: 14.5995,
-            longitude: 120.9842,
-            accuracy: null,
-          });
-        }
+        console.log('Location error:', errorMessage);
+        // Keep the default location set in useEffect
       },
       {
-        enableHighAccuracy: false, // Changed to false to avoid timeouts
-        timeout: 10000, // Increased timeout to 10 seconds
-        maximumAge: 300000, // Allow cached position up to 5 minutes
+        enableHighAccuracy: false, // Use WiFi/network for laptops (faster)
+        timeout: 10000, // 10 seconds timeout
+        maximumAge: 300000, // Use cached position up to 5 minutes old
       }
     );
 
@@ -116,12 +118,58 @@ export const LocationProvider = ({ children }) => {
       .sort((a, b) => a.distance - b.distance);
   };
 
+  const refreshLocation = () => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation not supported'));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const newLocation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+          };
+          setUserLocation(newLocation);
+          setLocationError(null);
+          resolve(newLocation);
+        },
+        (error) => {
+          let errorMessage = '';
+          switch(error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Location access denied';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Location unavailable';
+              break;
+            case error.TIMEOUT:
+              errorMessage = 'Location request timed out';
+              break;
+            default:
+              errorMessage = 'Location error';
+          }
+          setLocationError(errorMessage);
+          reject(new Error(errorMessage));
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 30000, // 30s for manual refresh
+          maximumAge: 0, // Force fresh location
+        }
+      );
+    });
+  };
+
   const value = {
     userLocation,
     locationError,
     isTracking,
     calculateDistance,
     getNearbyDestinations,
+    refreshLocation,
   };
 
   return <LocationContext.Provider value={value}>{children}</LocationContext.Provider>;

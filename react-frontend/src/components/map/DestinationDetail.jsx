@@ -1,9 +1,17 @@
 import React from 'react';
+import Modal from '../common/Modal';
 import Button from '../common/Button';
-import { Coins, MapPin, Home, Star, Gift, Hotel, Wheat, Mountain } from 'lucide-react';
+import { Coins, MapPin, Home, Star, Gift, Hotel, Wheat, Mountain, Navigation } from 'lucide-react';
 
-const DestinationDetail = ({ destination, userLocation, onClose, onCheckIn, onNavigate }) => {
+const DestinationDetail = ({ destination, userLocation, onClose, onCheckIn, onNavigate, isSaved, onToggleSave }) => {
   if (!destination) return null;
+
+  const handleToggleSave = (e) => {
+    e.stopPropagation();
+    if (onToggleSave) {
+      onToggleSave(destination.id);
+    }
+  };
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371;
@@ -42,8 +50,12 @@ const DestinationDetail = ({ destination, userLocation, onClose, onCheckIn, onNa
       )
     : null;
 
+  // Check if user is within 50 meters (0.05 km)
+  const isWithinRange = distance !== null && distance <= 0.05;
+
   const getCategoryColor = (category) => {
-    switch (category) {
+    const lowerCategory = category?.toLowerCase() || '';
+    switch (lowerCategory) {
       case 'hotel':
         return 'from-blue-400 to-blue-600';
       case 'agri farm':
@@ -56,31 +68,105 @@ const DestinationDetail = ({ destination, userLocation, onClose, onCheckIn, onNa
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header with Icon */}
-      <div className="text-center">
-        <div
-          className={`inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br ${getCategoryColor(
-            destination.category
-          )} rounded-3xl shadow-lg mb-4`}
-        >
-          {getCategoryIcon(destination.category)}
+    <Modal
+      isOpen={!!destination}
+      onClose={onClose}
+      title={destination.name || destination.title}
+      titleIcon={<span className="text-2xl">{destination.categoryIcon || '📍'}</span>}
+      size="md"
+      footer={
+        <>
+          <Button 
+            variant="outline" 
+            onClick={onClose}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          
+          {/* Show Navigate button */}
+          {distance !== null && !isWithinRange && onNavigate && (
+            <Button
+              variant="primary"
+              onClick={() => {
+                onNavigate(destination);
+                onClose();
+              }}
+              className="flex-1 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600"
+              icon={<Navigation className="w-5 h-5" />}
+            >
+              Navigate
+            </Button>
+          )}
+          
+          {/* Show Scan QR Code button if user is within 50 meters */}
+          {isWithinRange && (
+            <Button
+              variant="primary"
+              onClick={() => {
+                onCheckIn();
+                onClose();
+              }}
+              className="flex-1 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600"
+            >
+              Scan QR Code
+            </Button>
+          )}
+        </>
+      }
+    >
+      <div className="space-y-4">
+      {/* Save Button */}
+      {onToggleSave && (
+        <div className="flex justify-center">
+          <button
+            onClick={handleToggleSave}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-full border-2 transition-all hover:scale-105 active:scale-95"
+            style={{
+              borderColor: isSaved ? '#ec4899' : '#cbd5e1',
+              backgroundColor: isSaved ? '#fce7f3' : '#f8fafc',
+              color: isSaved ? '#ec4899' : '#64748b'
+            }}
+          >
+            <svg
+              className={`w-6 h-6 transition-all ${
+                isSaved ? 'fill-pink-500 text-pink-500' : 'fill-none text-slate-400'
+              }`}
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
+              />
+            </svg>
+            <span className="font-semibold">
+              {isSaved ? 'Saved' : 'Save Location'}
+            </span>
+          </button>
         </div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">{destination.title}</h2>
+      )}
+      {/* Category Badge */}
+      <div className="flex justify-center">
         <span
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold ${destination.categoryColor}`}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold text-white bg-gradient-to-br ${getCategoryColor(
+            destination.category
+          )} shadow-lg`}
         >
-          {destination.category}
+          <span className="text-lg">{destination.categoryIcon || '📍'}</span>
+          {destination.categoryName || destination.category}
         </span>
       </div>
 
       {/* Description */}
-      <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-        <p className="text-slate-700 leading-relaxed">{destination.description}</p>
+      <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+        <p className="text-slate-700 text-sm leading-relaxed">{destination.description}</p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3">
         {/* Points */}
         <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-2xl p-4 border border-orange-200">
           <div className="flex items-center gap-2 mb-2">
@@ -225,56 +311,8 @@ const DestinationDetail = ({ destination, userLocation, onClose, onCheckIn, onNa
           </div>
         </div>
       )}
-
-      {/* Actions */}
-      <div className="flex gap-3">
-        <Button variant="outline" onClick={onClose} className="flex-1">
-          Close
-        </Button>
-        
-        {/* Show Start Navigation button if user is far from destination */}
-        {distance !== null && distance > 0.1 && onNavigate && (
-          <Button
-            variant="primary"
-            onClick={() => onNavigate(destination)}
-            className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600"
-            icon={
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-                />
-              </svg>
-            }
-          >
-            Navigate
-          </Button>
-        )}
-        
-        {/* Show Scan QR Code button if user is close */}
-        {distance !== null && distance <= 0.1 && (
-          <Button
-            variant="primary"
-            onClick={onCheckIn}
-            className="flex-1"
-            icon={
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
-                />
-              </svg>
-            }
-          >
-            Scan QR Code
-          </Button>
-        )}
-      </div>
-    </div>
+        </div>
+    </Modal>
   );
 };
 

@@ -1,265 +1,276 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BarChart3, MapPin, Award, Gift, Map, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, MapPin, Tag, Award, Users, Settings, Gift, ChevronLeft } from 'lucide-react';
 
-const DashboardTabs = ({ onCollapseChange }) => {
+// RESTORED: Original admin sidebar menu items
+const TABS = [
+  { id: 'dashboard', label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+  { id: 'destinations', label: 'Destinations', path: '/admin/destinations', icon: MapPin },
+  { id: 'categories', label: 'Categories', path: '/admin/categories', icon: Tag },
+  { id: 'badges', label: 'Badges', path: '/admin/badges', icon: Award },
+  { id: 'users', label: 'Users', path: '/admin/users', icon: Users },
+  { id: 'rewards', label: 'Rewards', path: '/admin/rewards', icon: Gift },
+  { id: 'settings', label: 'Settings', path: '/admin/settings', icon: Settings },
+];
+
+
+
+const DashboardTabs = React.memo(({ onCollapseChange }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const handleToggleCollapse = () => {
+  // ✅ PERFORMANCE: Memoize current path to prevent unnecessary recalculations
+  const currentPath = useMemo(() => location.pathname, [location.pathname]);
+
+  // ✅ PERFORMANCE: Memoize collapse handler
+  const handleToggleCollapse = useCallback(() => {
     const newState = !isCollapsed;
     setIsCollapsed(newState);
     if (onCollapseChange) {
       onCollapseChange(newState);
     }
-  };
+  }, [isCollapsed, onCollapseChange]);
 
-  const getIcon = (id, className) => {
-    const props = { 
-      className, 
-      strokeWidth: 2,
-      fill: 'none',
-      style: { backgroundColor: 'transparent' }
-    };
-    switch(id) {
-      case 'overview':
-        return <BarChart3 {...props} />;
-      case 'destinations':
-        return <MapPin {...props} />;
-      case 'badges':
-        return <Award {...props} />;
-      case 'rewards':
-        return <Gift {...props} />;
-      case 'map':
-        return <Map {...props} />;
-      case 'settings':
-        return <Settings {...props} />;
-      default:
-        return null;
+  // ✅ F1 SPEED: Instant navigation with optimistic UI update
+  const handleNavigate = useCallback((path, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
-  };
+    // Instant navigation - no delay
+    navigate(path);
+    // Instant scroll - no animation delay
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [navigate]);
 
-  const tabs = [
-    { id: 'overview', label: 'Overview', path: '/admin/dashboard' },
-    { id: 'destinations', label: 'Destinations', path: '/admin/destinations' },
-    { id: 'badges', label: 'Badges', path: '/admin/badges' },
-    { id: 'rewards', label: 'Rewards', path: '/admin/rewards' },
-    { id: 'map', label: 'Map', path: '/admin/map' },
-    { id: 'settings', label: 'Settings', path: '/admin/settings' },
-  ];
-
-  const isActive = (path) => {
-    // Check if we're on the exact path or a sub-route
+  // ✅ PERFORMANCE: Memoize active check function
+  const isActive = useCallback((path) => {
     if (path === '/admin/destinations') {
-      return location.pathname.startsWith('/admin/destinations');
+      return currentPath.startsWith('/admin/destinations');
+    }
+    if (path === '/admin/categories') {
+      return currentPath.startsWith('/admin/categories');
     }
     if (path === '/admin/badges') {
-      return location.pathname.startsWith('/admin/badges');
+      return currentPath.startsWith('/admin/badges');
     }
     if (path === '/admin/rewards') {
-      return location.pathname.startsWith('/admin/rewards');
+      return currentPath.startsWith('/admin/rewards');
     }
     if (path === '/admin/settings') {
-      return location.pathname.startsWith('/admin/settings');
+      return currentPath.startsWith('/admin/settings');
     }
-    return location.pathname === path;
-  };
+    return currentPath === path;
+  }, [currentPath]);
 
   return (
     <>
-      {/* Desktop Sidebar - Left side navigation below header */}
+      {/* Desktop Sidebar - Clean minimalist design matching reference */}
       <motion.aside 
         animate={{ 
           width: isCollapsed ? '5rem' : '16rem'
         }}
-        transition={{ duration: 0.3, ease: 'easeInOut' }}
-        className="hidden md:flex fixed left-0 top-20 h-[calc(100vh-5rem)] bg-gradient-to-b from-white to-purple-50/30 border-r border-purple-100 shadow-lg flex-col z-30 py-6 overflow-hidden"
+        transition={{ duration: 0, ease: 'linear' }}
+        className="fixed left-0 top-0 h-screen bg-white border-r border-gray-200 z-50 flex flex-col"
       >
-        {/* Collapse Toggle Button */}
-        <motion.button
-          onClick={handleToggleCollapse}
-          className="absolute -right-3 top-8 w-6 h-6 bg-purple-500 hover:bg-purple-600 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 z-40 group"
-          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-        >
-          <motion.div
-            animate={{ rotate: isCollapsed ? 180 : 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
-          >
-            <ChevronLeft className="w-4 h-4 text-white" />
-          </motion.div>
-        </motion.button>
+        {/* Header - Logo & Title */}
+        <div className="p-4 flex items-center gap-3">
+          {!isCollapsed ? (
+            <>
+              <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900">TravelQuest</h2>
+                <p className="text-xs text-gray-500">Explorer</p>
+              </div>
+              <button
+                onClick={handleToggleCollapse}
+                className="ml-auto p-1.5 bg-white border border-gray-200 hover:border-teal-500 rounded-lg transition-all"
+              >
+                <ChevronLeft className="w-4 h-4 text-gray-600" />
+              </button>
+            </>
+          ) : (
+            <div className="w-full flex justify-center">
+              <button
+                onClick={handleToggleCollapse}
+                className="p-1.5 bg-white border border-gray-200 hover:border-teal-500 rounded-lg transition-all"
+              >
+                <ChevronLeft className="w-4 h-4 text-gray-600 rotate-180" />
+              </button>
+            </div>
+          )}
+        </div>
 
-        <nav className="flex-1 px-3 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-purple-200 scrollbar-track-transparent">
-          {tabs.map((tab, index) => {
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
+          {TABS.map((tab) => {
             const active = isActive(tab.path);
+            const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
-                onClick={() => {
-                  navigate(tab.path);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                onClick={(e) => handleNavigate(tab.path, e)}
+                style={{
+                  backgroundColor: active ? '#0d9488' : 'transparent',
+                  color: active ? '#ffffff' : '#374151'
                 }}
                 className={`
-                  w-full group flex items-center gap-3 px-4 py-3.5 rounded-xl font-semibold transition-all duration-200 relative overflow-hidden
-                  ${
-                    active
-                      ? 'text-white'
-                      : 'bg-white/50 text-slate-600 hover:bg-white hover:text-purple-600 border border-transparent hover:border-purple-100 hover:shadow-sm'
-                  }
+                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
+                  ${!active && 'hover:bg-gray-50'}
+                  ${isCollapsed ? 'justify-center' : ''}
                 `}
                 title={tab.label}
               >
-                {/* Active indicator - smoothly slides between tabs */}
-                {active && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute inset-0 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl shadow-lg"
-                    initial={false}
-                    transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                  />
+                <Icon className="w-5 h-5 flex-shrink-0" />
+                {!isCollapsed && (
+                  <span className="text-sm font-medium">{tab.label}</span>
                 )}
-                
-                <div className="relative z-10">
-                  {getIcon(tab.id, `w-5 h-5 ${active ? 'text-white' : ''}`)}
-                </div>
-                
-                <AnimatePresence mode="wait">
-                  {!isCollapsed && (
-                    <motion.span
-                      initial={{ opacity: 0, width: 0 }}
-                      animate={{ opacity: 1, width: 'auto' }}
-                      exit={{ opacity: 0, width: 0 }}
-                      transition={{ duration: 0.25, ease: 'easeInOut' }}
-                      className={`text-base whitespace-nowrap relative z-10 ${active ? 'text-white font-bold' : ''}`}
-                    >
-                      {tab.label}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
               </button>
             );
           })}
         </nav>
 
-        {/* Sidebar Footer - Only show when not collapsed */}
-        <AnimatePresence>
-          {!isCollapsed && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="px-4 pt-4 border-t border-purple-100"
-            >
-              <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-3 text-center">
-                <p className="text-xs font-semibold text-purple-600 mb-1">TravelQuest Admin</p>
-                <p className="text-xs text-slate-500">Manage your platform</p>
+        {/* User Profile at Bottom */}
+        {!isCollapsed && (
+          <div className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-teal-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                U
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">John Doe</p>
+                <p className="text-xs text-gray-500">Level 5</p>
+              </div>
+            </div>
+          </div>
+        )}
+
       </motion.aside>
 
-      {/* Tablet View - Semi-collapsed sidebar */}
-      <aside 
-        className="hidden sm:flex md:hidden fixed left-0 top-20 h-[calc(100vh-5rem)] w-20 bg-gradient-to-b from-white to-purple-50/30 border-r border-purple-100 shadow-lg flex-col z-30 py-6"
-      >
-        <nav className="flex-1 px-2 space-y-3 overflow-y-auto">
-          {tabs.map((tab, index) => {
-            const active = isActive(tab.path);
-            return (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  navigate(tab.path);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className={`
-                  w-full flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl transition-all duration-200 relative group
-                  ${
-                    active
-                      ? 'text-white'
-                      : 'bg-white/50 text-slate-600 hover:bg-purple-50 hover:text-purple-600'
-                  }
-                `}
-                title={tab.label}
-              >
-                {/* Active indicator background */}
-                {active && (
-                  <motion.div
-                    layoutId="tabletActiveTab"
-                    className="absolute inset-0 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl"
-                    initial={false}
-                    transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                  />
-                )}
+      {/* Tablet View - Burger Menu */}
+      <div className="hidden sm:block md:hidden">
+        {/* Burger Button */}
+        <motion.button
+          onClick={handleToggleCollapse}
+          className="fixed left-4 top-24 z-50 w-12 h-12 bg-white hover:bg-teal-50 border-2 border-teal-200 rounded-xl flex items-center justify-center shadow-lg transition-all duration-200"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <div className="flex flex-col gap-1.5">
+            <motion.span 
+              animate={{ rotate: isCollapsed ? 45 : 0, y: isCollapsed ? 6 : 0 }}
+              className="w-6 h-0.5 bg-teal-600 rounded-full transition-all"
+            />
+            <motion.span 
+              animate={{ opacity: isCollapsed ? 0 : 1 }}
+              className="w-6 h-0.5 bg-teal-600 rounded-full transition-all"
+            />
+            <motion.span 
+              animate={{ rotate: isCollapsed ? -45 : 0, y: isCollapsed ? -6 : 0 }}
+              className="w-6 h-0.5 bg-teal-600 rounded-full transition-all"
+            />
+          </div>
+        </motion.button>
 
-                <div className="relative z-10">
-                  {getIcon(tab.id, `w-6 h-6 ${active ? 'text-white' : ''}`)}
-                </div>
-                <span className={`text-xs font-medium relative z-10 ${active ? 'text-white' : ''}`}>
-                  {tab.label.split(' ')[0]}
-                </span>
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
+
+
+        {/* Sliding Menu */}
+        <AnimatePresence>
+          {isCollapsed && (
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="fixed left-0 top-20 h-[calc(100vh-5rem)] w-64 bg-gradient-to-b from-white to-teal-50/30 border-r border-teal-100 shadow-2xl z-50 py-6 overflow-hidden"
+            >
+              <nav className="flex-1 px-3 space-y-2 overflow-y-auto h-full scrollbar-hide">
+                {TABS.map((tab) => {
+                  const active = isActive(tab.path);
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        handleNavigate(tab.path);
+                        handleToggleCollapse();
+                      }}
+                      className={`
+                        w-full group flex items-center gap-3 px-4 py-3.5 rounded-xl font-semibold transition-all duration-75 relative overflow-hidden
+                        ${
+                          active
+                            ? 'text-white'
+                            : 'bg-white/50 text-slate-600 hover:bg-white hover:text-teal-600 border border-transparent hover:border-teal-100 hover:shadow-sm'
+                        }
+                      `}
+                    >
+                      {active && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-teal-500 to-cyan-600 rounded-xl shadow-lg transition-all duration-75" />
+                      )}
+                      
+                      <div className="relative z-10">
+                        <tab.icon className={`w-5 h-5 ${active ? 'text-white' : ''}`} />
+                      </div>
+                      
+                      <span className={`text-base whitespace-nowrap relative z-10 ${active ? 'text-white font-bold' : ''}`}>
+                        {tab.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* Mobile Navigation - Fixed bottom bar */}
       <div 
-        className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg z-50 border-t border-purple-100 shadow-2xl"
+        className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg z-50 border-t border-teal-100 shadow-2xl"
       >
-        <div className="flex justify-around items-center h-16 px-2 relative">
-          {/* Active indicator background */}
-          <AnimatePresence mode="wait">
-            {tabs.map((tab) => {
-              if (isActive(tab.path)) {
-                return (
-                  <motion.div
-                    key={`mobile-bg-${tab.id}`}
-                    layoutId="mobileActiveTab"
-                    className="absolute top-0 bg-gradient-to-b from-purple-100 to-transparent rounded-t-2xl"
-                    initial={false}
-                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                    style={{
-                      width: `${100 / tabs.length}%`,
-                      height: '100%',
-                      left: `${(tabs.findIndex(t => t.id === tab.id) * 100) / tabs.length}%`
-                    }}
-                  />
-                );
-              }
-              return null;
-            })}
-          </AnimatePresence>
+        <div className="flex items-center h-16 relative">
+          {/* ✅ OPTIMIZED: Removed layoutId, using CSS transitions instead */}
+          {TABS.map((tab, tabIndex) => {
+            if (isActive(tab.path)) {
+              return (
+                <div
+                  key={`mobile-bg-${tab.id}`}
+                  className="absolute top-0 bg-gradient-to-b from-teal-100 to-transparent rounded-t-2xl pointer-events-none transition-all duration-150"
+                  style={{
+                    width: `${100 / TABS.length}%`,
+                    height: '100%',
+                    left: `${(tabIndex * 100) / TABS.length}%`,
+                    transform: 'translateX(0)'
+                  }}
+                />
+              );
+            }
+            return null;
+          })}
 
-          {tabs.map((tab, index) => {
+          {TABS.map((tab, index) => {
             const active = isActive(tab.path);
             return (
               <button
                 key={tab.id}
-                onClick={() => {
-                  navigate(tab.path);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="flex flex-col items-center justify-center gap-1 p-2 relative z-10 min-w-[60px] bg-transparent"
+                onClick={(e) => handleNavigate(tab.path, e)}
+                className="flex flex-col items-center justify-center gap-1 p-2 relative z-10 flex-1 bg-transparent active:scale-90 transition-transform duration-75"
               >
-                {getIcon(tab.id, `w-6 h-6 transition-colors duration-200 ${active ? 'text-purple-600' : 'text-slate-400'}`)}
-                <span className={`text-[10px] font-medium transition-colors duration-200 ${active ? 'text-purple-600' : 'text-slate-500 opacity-70'}`}>
+                <tab.icon className={`w-6 h-6 transition-colors duration-75 ${active ? 'text-teal-600' : 'text-slate-400'}`} />
+                <span className={`text-[10px] font-medium transition-colors duration-75 ${active ? 'text-teal-600' : 'text-slate-500 opacity-70'}`}>
                   {tab.label.split(' ')[0]}
                 </span>
                 
-                {/* Active indicator dot - smooth movement */}
+                {/* ✅ F1 SPEED: Instant visual indicator with 75ms transition */}
                 {active && (
-                  <motion.div
-                    layoutId="mobileActiveDot"
-                    className="absolute -top-0.5 w-1.5 h-1.5 bg-purple-600 rounded-full"
-                    initial={false}
-                    transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                  <div
+                    className="absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-teal-600 rounded-full transition-all duration-75"
                   />
                 )}
               </button>
@@ -269,6 +280,11 @@ const DashboardTabs = ({ onCollapseChange }) => {
       </div>
     </>
   );
-};
+}, (prevProps, nextProps) => {
+  // ✅ PERFORMANCE: Custom comparison - only re-render if props actually change
+  return prevProps.onCollapseChange === nextProps.onCollapseChange;
+});
+
+DashboardTabs.displayName = 'DashboardTabs';
 
 export default DashboardTabs;

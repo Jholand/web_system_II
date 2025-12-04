@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
@@ -6,65 +6,159 @@ import AnimatedPage from '../../components/common/AnimatedPage';
 import UserHeader from '../../components/common/UserHeader';
 import UserDashboardTabs from '../../components/user/UserDashboardTabs';
 import Button from '../../components/common/Button';
+import Modal from '../../components/common/Modal';
+import QRScanner from '../../components/qr/QRScanner';
+import CheckInReview from '../../components/user/CheckInReview';
+import { useCheckIn } from '../../hooks/useCheckIn.jsx';
+import { useCheckins, useCheckinStats } from '../../hooks/useUserData';
 import toast from 'react-hot-toast';
 import ToastNotification from '../../components/common/ToastNotification';
 
-const UserSettings = () => {
+const UserSettings = React.memo(() => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
-
-  // User data
-  const userData = {
-    name: user?.name || 'Guest User',
-    email: 'user@example.com',
-    phone: '+63 912 345 6789',
-    address: 'Manila, Philippines',
-    joinedDate: 'January 15, 2024',
-    points: 250,
-    visits: 12,
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  
+  // ⚡ REACT QUERY - INSTANT from cache
+  const { data: statsData } = useCheckinStats();
+  const { data: checkinsData } = useCheckins(5);
+  
+  const userStats = { 
+    total_visits: statsData?.total_visits || 0, 
+    total_points: statsData?.total_points || 0 
   };
+  const recentCheckIns = checkinsData?.checkins || [];
+  const loadingCheckIns = false
+  
+  const {
+    showScanModal,
+    setShowScanModal,
+    showReviewModal,
+    setShowReviewModal,
+    scannedQRCode,
+    checkInDestination,
+    destinations,
+    fetchDestinations,
+    handleScanSuccess,
+    handleReviewSubmit,
+    resetCheckIn
+  } = useCheckIn();
 
-  const handleSaveProfile = () => {
+  // ✅ PERFORMANCE: Memoize event handlers
+  const handleSaveProfile = useCallback(() => {
     toast.success('Profile updated successfully!');
-  };
+  }, []);
 
-  const handleChangePassword = () => {
-    toast.success('Password changed successfully!');
-  };
+  const handleChangePassword = useCallback(async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('Please fill in all password fields');
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    
+    if (newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters');
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('auth_token');
+      const API_BASE_URL = window.location.hostname === 'localhost' 
+        ? 'http://localhost:8000/api'
+        : `http://${window.location.hostname}:8000/api`;
+      
+      const response = await fetch(`${API_BASE_URL}/user/change-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+          new_password_confirmation: confirmPassword
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success || response.ok) {
+        toast.success('Password changed successfully!');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        toast.error(data.message || 'Failed to change password');
+      }
+    } catch (error) {
+      toast.error('Error changing password. Please try again.');
+    }
+  }, [currentPassword, newPassword, confirmPassword]);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     logout();
     navigate('/');
-  };
+  }, [logout, navigate]);
+
+  const handleSidebarCollapse = useCallback((collapsed) => {
+    setSidebarCollapsed(collapsed);
+  }, []);
+
+  const handleScannerClick = useCallback(() => {
+    setShowScanModal(true);
+  }, []);
+
+  // ✅ Fetch destinations on mount only
+  useEffect(() => {
+    fetchDestinations();
+  }, [fetchDestinations]);
 
   return (
-    <AnimatedPage className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 relative">
+      {/* Decorative Background */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute top-20 left-10 w-72 h-72 bg-teal-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+        <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+      </div>
+      
       <ToastNotification />
       
       
-      <UserHeader user={userData} onLogout={handleLogout} />
+      <UserHeader user={user} onLogout={handleLogout} />
 
-      <UserDashboardTabs onCollapseChange={setSidebarCollapsed} />
+      <UserDashboardTabs onCollapseChange={handleSidebarCollapse} onScannerClick={handleScannerClick} />
 
       {/* Main Content */}
       <main 
         className={`
+          relative z-10
           transition-all duration-300 ease-in-out
           ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
-          sm:ml-20 
-          max-w-7xl mx-auto px-4 sm:px-6 pt-24 sm:py-8 pb-32 sm:pb-20 md:pb-8
+          max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
         `}
       >
-        <motion.h2 
-          className="text-2xl sm:text-3xl font-bold text-slate-900 mb-6 sm:mb-8"
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
+        {/* Page Header */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
         >
-          Settings
-        </motion.h2>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+            Settings
+          </h1>
+          <p className="text-sm text-gray-600">
+            Manage your account preferences and security
+          </p>
+        </motion.div>
 
         <motion.div 
           className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
@@ -115,22 +209,73 @@ const UserSettings = () => {
                   
                   <div className="flex items-start gap-6 mb-8">
                     <div className="w-24 h-24 bg-gradient-to-br from-teal-400 to-blue-500 rounded-2xl flex items-center justify-center text-white text-4xl font-bold shadow-lg">
-                      {userData.name.charAt(0).toUpperCase()}
+                      {user?.name?.charAt(0).toUpperCase() || 'U'}
                     </div>
                     <div className="flex-1">
-                      <h4 className="text-xl font-bold text-slate-900">{userData.name}</h4>
-                      <p className="text-slate-600">{userData.email}</p>
+                      <h4 className="text-xl font-bold text-slate-900">{user?.name || 'Guest User'}</h4>
+                      <p className="text-slate-600">{user?.email || 'N/A'}</p>
                       <div className="flex gap-4 mt-3">
                         <div className="bg-teal-100 px-4 py-2 rounded-lg">
                           <p className="text-xs text-teal-700 font-bold uppercase">Points</p>
-                          <p className="text-2xl font-bold text-teal-600">{userData.points}</p>
+                          <p className="text-2xl font-bold text-teal-600">{user?.total_points || 0}</p>
                         </div>
                         <div className="bg-purple-100 px-4 py-2 rounded-lg">
                           <p className="text-xs text-purple-700 font-bold uppercase">Visits</p>
-                          <p className="text-2xl font-bold text-purple-600">{userData.visits}</p>
+                          <p className="text-2xl font-bold text-purple-600">{userStats.total_visits || 0}</p>
                         </div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Recent Check-Ins Section */}
+                  <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl p-6 border border-teal-200 mb-6">
+                    <h4 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                      <svg className="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                      </svg>
+                      Recent Check-Ins
+                    </h4>
+                    
+                    {loadingCheckIns ? (
+                      <div className="text-center py-8">
+                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
+                        <p className="text-sm text-slate-600 mt-2">Loading check-ins...</p>
+                      </div>
+                    ) : recentCheckIns.length > 0 ? (
+                      <div className="space-y-3">
+                        {recentCheckIns.map((checkIn, index) => (
+                          <div key={checkIn.id || `checkin-${index}`} className="flex items-center justify-between p-3 bg-white rounded-lg border border-teal-100 hover:shadow-md transition-shadow">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
+                              <div>
+                                <h5 className="font-bold text-slate-900 text-sm">{checkIn.location}</h5>
+                                <p className="text-xs text-slate-600">{checkIn.time}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-base font-bold text-teal-600">+{checkIn.points} pts</p>
+                              <span className="inline-block px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                                Success
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                        </div>
+                        <p className="text-sm font-medium text-slate-700 mb-1">No check-ins yet</p>
+                        <p className="text-xs text-slate-500">Start exploring and checking in to destinations!</p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -143,7 +288,7 @@ const UserSettings = () => {
                       </label>
                       <input
                         type="text"
-                        defaultValue={userData.name}
+                        defaultValue={user?.name || ''}
                         className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
                       />
                     </div>
@@ -157,7 +302,7 @@ const UserSettings = () => {
                       </label>
                       <input
                         type="email"
-                        defaultValue={userData.email}
+                        defaultValue={user?.email || ''}
                         className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
                       />
                     </div>
@@ -171,7 +316,7 @@ const UserSettings = () => {
                       </label>
                       <input
                         type="text"
-                        defaultValue={userData.phone}
+                        defaultValue={user?.phone || ''}
                         className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
                       />
                     </div>
@@ -186,7 +331,7 @@ const UserSettings = () => {
                       </label>
                       <input
                         type="text"
-                        defaultValue={userData.address}
+                        defaultValue={user?.address || ''}
                         className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
                       />
                     </div>
@@ -215,6 +360,8 @@ const UserSettings = () => {
                       </label>
                       <input
                         type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
                         className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
                         placeholder="••••••••"
                       />
@@ -229,6 +376,8 @@ const UserSettings = () => {
                       </label>
                       <input
                         type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
                         className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
                         placeholder="••••••••"
                       />
@@ -243,6 +392,8 @@ const UserSettings = () => {
                       </label>
                       <input
                         type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
                         className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
                         placeholder="••••••••"
                       />
@@ -271,8 +422,54 @@ const UserSettings = () => {
           </motion.div>
         </motion.div>
       </main>
-    </AnimatedPage>
+
+      {/* QR Scanner Modal */}
+      {showScanModal && (
+        <Modal
+          isOpen={showScanModal}
+          onClose={() => setShowScanModal(false)}
+          title="Scan QR Code"
+          size="lg"
+        >
+          <QRScanner
+            onScanSuccess={(qrCode) => handleScanSuccess(qrCode, destinations)}
+            onClose={() => setShowScanModal(false)}
+          />
+        </Modal>
+      )}
+
+      {/* Check-In Review Modal */}
+      {showReviewModal && checkInDestination && (
+        <Modal
+          isOpen={showReviewModal}
+          onClose={() => {
+            setShowReviewModal(false);
+            resetCheckIn();
+          }}
+          title="Check-In Review"
+          size="lg"
+        >
+          <CheckInReview
+            destination={checkInDestination}
+            qrCode={scannedQRCode}
+            onSubmit={async (reviewData) => {
+              const result = await handleReviewSubmit(reviewData);
+              if (result.success) {
+                // Refresh recent check-ins
+                fetchRecentCheckIns();
+              }
+            }}
+            onCancel={() => {
+              setShowReviewModal(false);
+              resetCheckIn();
+            }}
+          />
+        </Modal>
+      )}
+    </div>
   );
-};
+});
+
+UserSettings.displayName = 'UserSettings';
 
 export default UserSettings;

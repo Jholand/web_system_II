@@ -27,16 +27,6 @@ const SearchFilter = ({
               placeholder={placeholder}
               className="w-full pl-12 pr-4 py-3 bg-white border-2 border-purple-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all"
             />
-            {searchQuery && (
-              <button
-                onClick={() => onSearchChange('')}
-                className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
           </div>
         </div>
 
@@ -55,8 +45,8 @@ const SearchFilter = ({
                 className="w-full pl-12 pr-4 py-3 bg-white border-2 border-purple-200 rounded-xl text-slate-900 font-medium focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all appearance-none cursor-pointer"
               >
                 <option value="all">All Categories</option>
-                {categories.map((category) => (
-                  <option key={category.value} value={category.value}>
+                {categories.map((category, index) => (
+                  <option key={category.value || category.id || `cat-${index}`} value={category.value}>
                     {category.label}
                   </option>
                 ))}

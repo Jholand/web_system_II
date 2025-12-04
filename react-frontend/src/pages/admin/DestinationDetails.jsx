@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { slideInFromRight, fadeIn } from '../../utils/animations';
 import AnimatedPage from '../../components/common/AnimatedPage';
 import AdminHeader from '../../components/common/AdminHeader';
@@ -8,6 +8,8 @@ import DashboardTabs from '../../components/dashboard/DashboardTabs';
 import Button from '../../components/common/Button';
 import toast from 'react-hot-toast';
 import ToastNotification from '../../components/common/ToastNotification';
+import { getCurrentAdmin } from '../../utils/adminHelper';
+import QRCode from 'qrcode';
 
 const DestinationDetails = () => {
   const { id } = useParams(); // Get destination ID from URL
@@ -72,6 +74,11 @@ const DestinationDetails = () => {
 
   // Active tab for sections
   const [activeSection, setActiveSection] = useState('basic');
+
+  // QR Code state
+  const [qrCodeUrl, setQrCodeUrl] = useState(null);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const qrCanvasRef = useRef(null);
 
   useEffect(() => {
     if (isEditMode && id) {
@@ -271,8 +278,46 @@ const DestinationDetails = () => {
     }
   };
 
-  const handleGenerateQRCode = () => {
-    toast.success('QR Code generated successfully');
+  const handleGenerateQRCode = async () => {
+    try {
+      console.log('Generating QR code...');
+      // Generate QR code data with destination info
+      const qrData = JSON.stringify({
+        type: 'destination',
+        id: id || 'new',
+        name: formData.name,
+        category: formData.category,
+        timestamp: new Date().toISOString()
+      });
+      console.log('QR Data:', qrData);
+
+      // Generate QR code as data URL
+      const qrDataUrl = await QRCode.toDataURL(qrData, {
+        width: 400,
+        margin: 2,
+        color: {
+          dark: '#0F172A',
+          light: '#FFFFFF'
+        }
+      });
+
+      console.log('QR Code generated:', qrDataUrl.substring(0, 50) + '...');
+      setQrCodeUrl(qrDataUrl);
+      toast.success('QR Code generated successfully!');
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+      toast.error('Failed to generate QR code');
+    }
+  };
+
+  const handleDownloadQR = () => {
+    if (!qrCodeUrl) return;
+    
+    const link = document.createElement('a');
+    link.download = `${formData.name || 'destination'}-qrcode.png`;
+    link.href = qrCodeUrl;
+    link.click();
+    toast.success('QR Code downloaded');
   };
 
   const handleSave = async () => {
@@ -317,16 +362,22 @@ const DestinationDetails = () => {
   ];
 
   const handleLogout = () => {
-    navigate('/login');
+    navigate('/');
   };
 
   return (
-    <AnimatedPage className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 relative overflow-y-auto scrollbar-hide">
+      {/* Decorative Background */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute top-20 left-10 w-72 h-72 bg-teal-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+        <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+      </div>
+      
       <ToastNotification />
       
       {/* Header */}
       <AdminHeader 
-        admin={{ name: 'em', role: 'Administrator' }}
+        admin={getCurrentAdmin()}
         onLogout={handleLogout}
       />
 
@@ -335,9 +386,9 @@ const DestinationDetails = () => {
       {/* Main Content */}
       <main 
         className={`
+          relative z-10
           transition-all duration-300 ease-in-out
           ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
-          sm:ml-20 
           max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
         `}
       >
@@ -346,20 +397,20 @@ const DestinationDetails = () => {
           className="mb-6"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.2 }}
         >
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl flex items-center justify-center shadow-lg">
+            <div className="w-12 h-12 bg-gradient-to-br from-teal-600 to-cyan-700 rounded-xl flex items-center justify-center shadow-lg">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </div>
             <div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
+              <h2 className="text-xs font-medium text-slate-900">
                 {isEditMode ? 'Edit Destination' : 'Add New Destination'}
               </h2>
-              <p className="text-slate-600 text-sm sm:text-base">
+              <p className="text-slate-600 text-xs">
                 {isEditMode 
                   ? `Update information for ${formData.name || 'this destination'}` 
                   : 'Create a new destination for travelers to explore'}
@@ -373,7 +424,7 @@ const DestinationDetails = () => {
           variants={fadeIn}
           initial="hidden"
           animate="visible"
-          className="bg-white rounded-xl shadow-sm border border-slate-200 p-2 mb-6 overflow-x-auto"
+          className="bg-white rounded-xl shadow-sm border border-slate-200 p-2 mb-6 overflow-x-auto scrollbar-hide"
         >
           <div className="flex gap-2 min-w-max">
             {sections.map((section) => (
@@ -403,7 +454,7 @@ const DestinationDetails = () => {
           {/* Basic Info Section */}
           {activeSection === 'basic' && (
             <div className="space-y-8">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">Basic Information</h2>
+              <h2 className="text-xs font-medium text-slate-900 mb-6">Basic Information</h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* Destination Name */}
@@ -525,7 +576,7 @@ const DestinationDetails = () => {
           {/* Location Section */}
           {activeSection === 'location' && (
             <div className="space-y-8">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">Location Details</h2>
+              <h2 className="text-xs font-medium text-slate-900 mb-6">Location Details</h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* Address */}
@@ -599,7 +650,7 @@ const DestinationDetails = () => {
                 {/* Coordinates */}
                 <div className="md:col-span-2 bg-slate-50 rounded-xl p-6 border-2 border-slate-200">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-slate-900">GPS Coordinates</h3>
+                    <h3 className="text-xs font-medium text-slate-900">GPS Coordinates</h3>
                     <Button variant="outline" size="sm" onClick={handleGetCurrentLocation} icon={
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -651,7 +702,7 @@ const DestinationDetails = () => {
           {activeSection === 'images' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-slate-900">Images & Photos</h2>
+                <h2 className="text-xs font-medium text-slate-900">Images & Photos</h2>
                 <label>
                   <input
                     type="file"
@@ -705,14 +756,14 @@ const DestinationDetails = () => {
                         {index !== primaryImageIndex && (
                           <button
                             onClick={() => handleSetPrimaryImage(index)}
-                            className="bg-white text-slate-900 px-3 py-2 rounded-lg font-medium opacity-0 group-hover:opacity-100 transition-all text-sm"
+                            className="bg-white text-slate-900 px-3 py-2 rounded-lg font-medium opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all text-sm"
                           >
                             Set Primary
                           </button>
                         )}
                         <button
                           onClick={() => handleRemoveImage(image.id)}
-                          className="bg-red-500 text-white px-3 py-2 rounded-lg font-medium opacity-0 group-hover:opacity-100 transition-all text-sm"
+                          className="bg-red-500 text-white px-3 py-2 rounded-lg font-medium opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all text-sm"
                         >
                           Remove
                         </button>
@@ -738,7 +789,7 @@ const DestinationDetails = () => {
           {/* Amenities Section */}
           {activeSection === 'amenities' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900 mb-4">Amenities & Features</h2>
+              <h2 className="text-xs font-medium text-slate-900 mb-4">Amenities & Features</h2>
               
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {availableAmenities.map((amenity) => (
@@ -752,7 +803,7 @@ const DestinationDetails = () => {
                     }`}
                   >
                     <span className="text-2xl">{amenity.icon}</span>
-                    <span className="text-sm font-medium">{amenity.name}</span>
+                    <span className="text-xs font-medium">{amenity.name}</span>
                     {selectedAmenities.includes(amenity.id) && (
                       <svg className="w-5 h-5 ml-auto text-teal-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -773,7 +824,7 @@ const DestinationDetails = () => {
           {/* Operating Hours Section */}
           {activeSection === 'hours' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900 mb-4">Operating Hours</h2>
+              <h2 className="text-xs font-medium text-slate-900 mb-4">Operating Hours</h2>
               
               <div className="space-y-4">
                 {operatingHours.map((schedule, index) => (
@@ -820,7 +871,7 @@ const DestinationDetails = () => {
           {/* Contact Info Section */}
           {activeSection === 'contact' && (
             <div className="space-y-8">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">Contact Information</h2>
+              <h2 className="text-2xl font-bold text-slate-900 mb-6">📞 Contact Information & QR Code</h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* Phone */}
@@ -869,29 +920,68 @@ const DestinationDetails = () => {
                 </div>
 
                 {/* QR Code Section */}
-                <div className="md:col-span-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-200">
-                  <div className="flex items-center justify-between mb-4">
+                <div className="md:col-span-2 bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl p-8 border-4 border-purple-400 shadow-xl">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
                     <div>
-                      <h3 className="text-lg font-bold text-slate-900">QR Code for Check-ins</h3>
-                      <p className="text-sm text-slate-600">Generate a unique QR code for this destination</p>
+                      <h3 className="text-2xl font-bold text-purple-900 mb-2">🎯 QR Code Generator</h3>
+                      <p className="text-lg text-purple-700">Generate a unique QR code for this destination check-ins</p>
                     </div>
-                    <Button variant="primary" size="md" onClick={handleGenerateQRCode}>
-                      Generate QR Code
+                    <Button 
+                      variant="primary" 
+                      size="lg" 
+                      onClick={handleGenerateQRCode}
+                      className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 text-lg font-bold rounded-xl shadow-lg"
+                    >
+                      {qrCodeUrl ? '🔄 Regenerate QR' : '✨ Generate QR Code'}
                     </Button>
                   </div>
-                  {isEditMode && (
-                    <div className="bg-white rounded-xl p-4 flex items-center gap-4">
-                      <div className="w-32 h-32 bg-slate-200 rounded-lg flex items-center justify-center">
-                        <span className="text-4xl">QR</span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-900 mb-2">Current QR Code</p>
-                        <p className="text-xs text-slate-600 mb-3">Last generated: 2 days ago</p>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm">Download</Button>
-                          <Button variant="outline" size="sm">Print</Button>
+                  {qrCodeUrl ? (
+                    <div className="bg-white rounded-2xl p-6 shadow-lg border-2 border-purple-200">
+                      <div className="flex flex-col md:flex-row items-center gap-6">
+                        <div 
+                          className="w-48 h-48 bg-white border-4 border-purple-300 rounded-2xl flex items-center justify-center cursor-pointer hover:border-purple-600 transition-all hover:shadow-2xl hover:scale-105 group relative"
+                          onClick={() => setShowQRModal(true)}
+                        >
+                          <img 
+                            src={qrCodeUrl} 
+                            alt="QR Code" 
+                            className="w-full h-full object-contain p-3"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-2xl transition-all flex items-center justify-center">
+                            <span className="text-white opacity-0 group-hover:opacity-100 text-lg font-bold bg-purple-600 px-4 py-2 rounded-lg">
+                              🔍 Click to Enlarge
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xl font-bold text-green-600 mb-2">✅ QR Code Generated Successfully!</p>
+                          <p className="text-base text-slate-700 mb-4">Click the QR code image or buttons below to view larger version</p>
+                          <div className="flex flex-wrap gap-3">
+                            <Button 
+                              variant="outline" 
+                              size="lg" 
+                              onClick={handleDownloadQR}
+                              className="bg-green-50 hover:bg-green-100 border-2 border-green-400 text-green-700 font-bold"
+                            >
+                              📥 Download QR
+                            </Button>
+                            <Button 
+                              variant="primary" 
+                              size="lg" 
+                              onClick={() => setShowQRModal(true)}
+                              className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-6"
+                            >
+                              🔍 View Large
+                            </Button>
+                          </div>
                         </div>
                       </div>
+                    </div>
+                  ) : (
+                    <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-6 text-center">
+                      <p className="text-lg text-yellow-800 font-semibold">
+                        👆 Click the "Generate QR Code" button above to create your QR code
+                      </p>
                     </div>
                   )}
                 </div>
@@ -915,7 +1005,83 @@ const DestinationDetails = () => {
           </Button>
         </motion.div>
       </main>
-    </AnimatedPage>
+
+      {/* QR Code Enlargement Modal */}
+      <AnimatePresence>
+        {showQRModal && qrCodeUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowQRModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ type: "spring", duration: 0.2 }}
+              className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">QR Code</h3>
+                  <p className="text-sm text-slate-600">{formData.name || 'Destination'}</p>
+                </div>
+                <button
+                  onClick={() => setShowQRModal(false)}
+                  className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors"
+                >
+                  <span className="text-2xl text-slate-600">×</span>
+                </button>
+              </div>
+
+              {/* QR Code Display */}
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-8 mb-4">
+                <div className="bg-white rounded-xl p-6 shadow-lg">
+                  <img 
+                    src={qrCodeUrl} 
+                    alt="QR Code Large" 
+                    className="w-full h-auto"
+                  />
+                </div>
+              </div>
+
+              {/* Instructions */}
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mb-4">
+                <p className="text-sm font-semibold text-blue-900 mb-2">📱 How to Test:</p>
+                <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                  <li>Open QR Scanner in the mobile app</li>
+                  <li>Take a photo of this QR code on your screen</li>
+                  <li>Upload the photo to scan</li>
+                  <li>System will verify the destination code</li>
+                </ol>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => setShowQRModal(false)}
+                >
+                  Close
+                </Button>
+                <Button 
+                  variant="primary" 
+                  className="flex-1"
+                  onClick={handleDownloadQR}
+                >
+                  📥 Download QR
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 

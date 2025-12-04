@@ -1,0 +1,1609 @@
+================================================================================
+                    TRAVELQUEST SYSTEM - COMPLETE DESCRIPTION
+================================================================================
+
+PROJECT INFORMATION
+-------------------
+Name: TravelQuest - Travel Gamification Platform
+Type: Full-Stack Web Application (Laravel Backend + React Frontend)
+Purpose: Location-based gamification system for Philippine tourism
+Architecture: RESTful API + Single Page Application (SPA)
+Database: MySQL with InnoDB Engine
+Development Environment: Laragon (Windows)
+
+================================================================================
+                            TECHNOLOGY STACK
+================================================================================
+
+BACKEND (Laravel)
+-----------------
+Framework: Laravel 12.x (PHP 8.2)
+Authentication: Laravel Sanctum (Token-based API authentication)
+Session Management: Laravel Fortify
+API Architecture: RESTful with resource controllers
+Database: MySQL with Eloquent ORM
+Caching: Redis/Database cache (5-second TTL for ultra-fresh data)
+Performance: Database indexing on 28+ critical columns
+Security: CSRF protection, rate limiting, middleware guards
+
+Key Laravel Packages:
+- laravel/sanctum: API authentication tokens
+- laravel/fortify: Session & authentication scaffolding
+- inertiajs/inertia-laravel: Server-side rendering
+- laravel/tinker: REPL for debugging
+- fakerphp/faker: Database seeding
+
+
+FRONTEND (React)
+----------------
+Framework: React 19.1.1 (Vite build tool)
+Router: React Router DOM 7.9.5
+State Management: @tanstack/react-query v5.90.11 (with 1s staleTime)
+UI Framework: Tailwind CSS 3.4.18
+Animations: Framer Motion 12.23.24
+Icons: Lucide React 0.553.0
+Maps: Leaflet 1.9.4 + React Leaflet 5.0.0
+Charts: Recharts 3.5.1
+QR Code: qrcode.react 4.2.0, html5-qrcode 2.3.8
+HTTP Client: Axios 1.13.2
+Notifications: React Hot Toast 2.6.0
+
+Performance Optimizations:
+- React Query with instant cached loading
+- useMemo for expensive computations
+- useCallback for event handlers
+- Lazy loading for images
+- Route-based code splitting
+
+
+DEVELOPMENT TOOLS
+-----------------
+Build Tool: Vite 7.1.7 (Fast HMR, optimized builds)
+Linter: ESLint 9.36.0
+CSS Processor: PostCSS 8.5.6, Autoprefixer 10.4.21
+Code Minification: Terser 5.44.1
+Testing: PHPUnit 11.5.3 (backend), Jest (frontend planned)
+
+================================================================================
+                            DATABASE ARCHITECTURE
+================================================================================
+
+TOTAL TABLES: 21
+TOTAL MIGRATIONS: 37
+PERFORMANCE INDEXES: 28+ critical columns
+
+CORE TABLES
+-----------
+
+1. users
+   - id, name, email, password, role (admin/user), status (active/inactive)
+   - email_verified_at, phone, avatar_path, points, level
+   - created_at, updated_at
+   - Indexes: email, role, status, points
+
+2. user_addresses
+   - id, user_id, address_type (home/work/other)
+   - street_address, barangay, municipality, province, postal_code
+   - latitude, longitude, is_primary
+   - Indexes: user_id, postal_code, is_primary
+
+3. destinations
+   - id, name, category_id, description, full_address
+   - street_address, barangay, municipality, province, postal_code
+   - latitude, longitude, amenities, website, email, phone
+   - checkin_points (default 10), qr_code_data_uri
+   - is_active, created_at, updated_at
+   - Indexes: category_id, is_active, municipality, latitude+longitude
+
+4. destination_categories
+   - id, name, slug, description, color, icon
+   - Examples: Hotels, Tourist Spots, Agri-Farms
+
+5. destination_images
+   - id, destination_id, image_path, caption, is_primary
+   - Indexes: destination_id, is_primary
+
+6. destination_operating_hours
+   - id, destination_id, day_of_week (0-6, 0=Sunday)
+   - open_time, close_time, is_closed
+   - Indexes: destination_id
+
+7. user_checkins
+   - id, user_id, destination_id, checkin_type (qr/gps/manual)
+   - latitude, longitude, points_earned, photo_path
+   - verification_status, verified_by, verified_at
+   - created_at (timestamptz)
+   - Indexes: 19 indexes including composite and covering indexes for performance
+   - Special: Optimized for dashboard queries, point calculations
+
+8. badges
+   - id, name, description, icon, color, rarity (common/rare/epic/legendary)
+   - requirement_type, requirement_value, points_reward
+   - is_active, display_order
+   - Indexes: is_active, rarity, display_order
+
+9. user_badges
+   - id, user_id, badge_id, earned_at, is_favorite, is_displayed
+   - progress_value, progress_percentage
+   - Indexes: user_id+badge_id (unique), is_favorite, is_displayed
+
+10. rewards
+    - id, name, category_id, description, image_path
+    - points_cost, stock_quantity, is_active, is_featured
+    - expiry_days, terms_conditions
+    - Indexes: category_id, is_active, is_featured, points_cost
+
+11. reward_categories
+    - id, name, slug, description, icon, color
+
+12. reward_destinations
+    - id, reward_id, destination_id
+    - can_redeem_at_location (boolean)
+    - Indexes: reward_id, destination_id
+
+13. user_reward_redemptions
+    - id, user_id, reward_id, redemption_code, points_spent
+    - redeemed_at, expires_at, used_at, status
+    - Indexes: user_id, reward_id, redemption_code, status
+
+14. user_points_transactions
+    - id, user_id, transaction_type (earned/spent/bonus/penalty)
+    - points, description, related_type, related_id
+    - created_at
+    - Indexes: user_id, transaction_type, created_at
+
+15. destination_reviews
+    - id, destination_id, user_id, rating (1-5)
+    - review_text, photos, helpful_count
+    - created_at, updated_at
+    - Indexes: destination_id, user_id, rating
+
+16. user_saved_destinations
+    - id, user_id, destination_id, created_at
+    - Indexes: user_id+destination_id (unique), destination_id
+
+17. personal_access_tokens (Sanctum)
+    - id, tokenable_type, tokenable_id, name, token, abilities
+    - last_used_at, expires_at, created_at
+    - Indexes: tokenable, token (unique), last_used_at
+
+LOOKUP TABLES
+-------------
+18. user_roles - Static roles (admin, user)
+19. user_statuses - Static statuses (active, inactive, suspended)
+20. badge_categories - Badge grouping
+21. cache - Laravel cache storage
+
+================================================================================
+                            USER ROLES & PERMISSIONS
+================================================================================
+
+ADMIN ROLE
+----------
+Full system access including:
+- Dashboard: View analytics, statistics, recent activities
+- Destination Management: CRUD operations, image uploads, QR generation
+- Category Management: CRUD for destination categories
+- Badge Management: CRUD badges, set requirements, toggle active status
+- Reward Management: CRUD rewards, stock management, category assignment
+- User Management: View all users, change passwords, deactivate accounts
+- Check-in Review: Verify manual check-ins, approve/reject submissions
+- Settings: System configuration, app settings
+
+Admin Routes Prefix: /admin/*
+Middleware: auth:sanctum + active + admin
+
+
+USER ROLE
+---------
+Standard features:
+- Map Exploration: View destinations, GPS tracking, real-time location
+- Check-ins: QR scan, GPS-based, manual submission
+- Badges: View earned badges, track progress, favorite badges
+- Rewards: Browse rewards, redeem with points, track redemptions
+- Profile: Edit account, change password, manage addresses
+- Saved Destinations: Bookmark favorites, view saved list
+- Reviews: Write reviews, rate destinations, upload photos
+- Dashboard: Personal stats, check-in history, digital footprint
+
+User Routes Prefix: /user/*
+Middleware: auth:sanctum + active
+
+================================================================================
+                          SYSTEM FEATURES (DETAILED)
+================================================================================
+
+1. AUTHENTICATION SYSTEM
+-------------------------
+Registration Flow:
+- Email validation (unique check)
+- Password encryption (bcrypt)
+- Auto-generate Sanctum token
+- Send verification email
+- Redirect to /user/dashboard (NOT /map)
+
+Login Flow:
+- Email + password validation
+- Rate limiting (60 attempts/minute)
+- Token generation with 24h expiry
+- Auto-login after registration
+- Remember me functionality
+- Redirect based on role (admin → /admin/dashboard, user → /user/dashboard)
+
+Logout:
+- Token revocation
+- Clear localStorage (auth_token, no user data caching)
+- Redirect to /login
+
+Password Management:
+- Current password verification
+- New password validation (min 8 chars)
+- Hash update in database
+- Force re-login after password change
+
+
+2. DESTINATION MANAGEMENT
+--------------------------
+Admin Features:
+- Create destination with full details
+- Upload multiple images (primary + gallery)
+- Set GPS coordinates (latitude, longitude)
+- Generate QR codes automatically
+- Set operating hours per day
+- Configure amenities (parking, wifi, restaurant, etc.)
+- Set check-in point value (default 10)
+- Activate/deactivate destinations
+
+User Features:
+- Browse destinations on interactive map (Leaflet)
+- Filter by category (Hotels, Tourist Spots, Agri-Farms)
+- View destination details (images, hours, amenities)
+- Get directions via Google Maps
+- Save to favorites
+- Write reviews and ratings
+- View distance from current location
+- See check-in history at destination
+
+
+3. CHECK-IN SYSTEM
+------------------
+Three Check-in Methods:
+
+A) QR Code Check-in:
+   - Scan QR at destination using html5-qrcode
+   - Verify QR data matches destination
+   - Optional GPS proximity check (within 100m)
+   - Capture photo during check-in
+   - Instant point award (default 10 points)
+   - Badge progress update
+   - Status: Auto-verified
+
+B) GPS Check-in:
+   - User clicks "Check-in Here" on map
+   - Verify GPS within 50m radius of destination
+   - Capture current location (lat/lng)
+   - Optional photo upload
+   - Instant point award
+   - Status: Auto-verified
+
+C) Manual Check-in:
+   - User submits check-in request
+   - Upload proof photo (required)
+   - Admin review and approval
+   - Status: Pending → Verified/Rejected
+   - Points awarded after approval
+
+Check-in Rules:
+- One check-in per destination per day
+- Duplicate check-ins blocked
+- Points calculated based on destination settings
+- Photo optional for QR/GPS, required for manual
+- History tracked with timestamps
+
+
+4. GAMIFICATION SYSTEM
+----------------------
+Points System:
+- Earn points through check-ins (default 10/destination)
+- Bonus points for rare badges
+- Spend points on rewards
+- Track transaction history
+- Points never expire
+- Leaderboard (planned feature)
+
+Badge System:
+- 4 Rarity Levels: Common, Rare, Epic, Legendary
+- Requirement Types:
+  * Total Check-ins (e.g., "Check in 10 times")
+  * Unique Destinations (e.g., "Visit 5 different places")
+  * Category-specific (e.g., "Visit 3 hotels")
+  * Consecutive Days (e.g., "7-day streak")
+  
+- Badge Features:
+  * Icon customization (emoji or image)
+  * Color coding by rarity
+  * Progress tracking (e.g., "3/10 check-ins")
+  * Favorite badges (display on profile)
+  * Auto-award when requirements met
+  * Point bonuses for earning badges
+
+Badge Display:
+- User dashboard shows earned badges
+- Pagination: 6 badges per page
+- Filter by rarity
+- Search by name
+- Hover to see full title
+- Progress bars for incomplete badges
+
+
+5. REWARDS SYSTEM
+-----------------
+Reward Types (Categories):
+- Discounts (e.g., "20% off hotel booking")
+- Freebies (e.g., "Free coffee at partner cafe")
+- Vouchers (e.g., "₱500 travel voucher")
+- Experiences (e.g., "Free tour guide")
+
+Redemption Flow:
+1. User browses rewards catalog
+2. Filters by category and points cost
+3. Clicks "Redeem" (checks sufficient points)
+4. System generates unique redemption code
+5. Deducts points from user balance
+6. Code expires after X days (configurable)
+7. User presents code at partner location
+8. Partner verifies code and marks as "used"
+
+Reward Features:
+- Stock quantity tracking
+- Expiry date management
+- Location-specific rewards (reward_destinations)
+- Terms & conditions display
+- Redemption history tracking
+- Status: Available, Redeemed, Used, Expired
+
+
+6. MAP & GPS FEATURES
+---------------------
+Technologies:
+- Leaflet.js for interactive maps
+- OpenStreetMap tiles
+- Geolocation API for user location
+- Haversine formula for distance calculation
+
+Map Features:
+- Real-time user location marker
+- Destination pins color-coded by category
+- Cluster markers for dense areas
+- Distance from user to destination
+- Zoom controls (min 5, max 18)
+- Pan and drag navigation
+- Click marker to view details
+- Route to destination (Google Maps integration)
+
+Mobile Support:
+- Auto-detect local IP for mobile access
+- WiFi network access (192.168.x.x:5173)
+- Responsive map controls
+- Touch gestures (pinch zoom, swipe pan)
+
+
+7. USER DASHBOARD
+-----------------
+Statistics Cards:
+- Total Check-ins (with trend indicator)
+- Unique Destinations visited
+- Current Points balance
+- Badges earned count
+
+Recent Activity:
+- Last 5 check-ins with dates
+- Destination names and photos
+- Points earned per check-in
+
+Digital Footprint:
+- Interactive map showing all visited destinations
+- Heatmap of frequent locations
+- Visited vs. not-visited markers
+
+Badge Collection:
+- Earned badges with progress
+- Favorite badges highlighted
+- Click to view badge details
+
+Saved Destinations:
+- Quick access to bookmarked places
+- Remove from favorites
+- Navigate to destination
+
+
+8. ADMIN DASHBOARD
+------------------
+Analytics Overview:
+- Total Users count
+- Total Destinations
+- Total Check-ins
+- Total Points awarded
+- Revenue from reward redemptions
+
+Recent Activity Feed:
+- Latest user registrations
+- Recent check-ins
+- Pending manual check-ins
+- Reward redemptions
+
+Charts & Graphs:
+- Check-ins over time (line chart)
+- Destinations by category (pie chart)
+- Top 10 popular destinations (bar chart)
+- User growth trend (area chart)
+
+Quick Actions:
+- Add new destination
+- Create badge/reward
+- Verify pending check-ins
+- Export reports (CSV/PDF)
+
+
+9. SETTINGS SYSTEM
+------------------
+App Settings (Admin):
+- App name configuration
+- Logo upload
+- Primary color theme
+- Default check-in points
+- Badge requirements presets
+- Reward expiry defaults
+- Email templates
+- SMS gateway settings
+
+User Settings:
+- Profile edit (name, phone, avatar)
+- Email notifications toggle
+- Push notifications (planned)
+- Privacy settings
+- Account deactivation
+
+
+10. SEARCH & FILTERING
+-----------------------
+Destination Search:
+- Text search by name
+- Category filter (Hotels/Tourist Spots/Agri-Farms)
+- Location filter (province, municipality)
+- Distance filter (within X km)
+- Rating filter (4+ stars)
+- Operating status (open now)
+
+Badge Search:
+- Search by name
+- Filter by rarity
+- Filter by earned/not earned
+- Sort by: Newest, Progress, Rarity
+
+Reward Search:
+- Search by name
+- Filter by category
+- Filter by points range
+- Filter by availability
+- Sort by: Newest, Points (low-high), Popular
+
+
+11. PAGINATION SYSTEM
+----------------------
+Implementation:
+- React Query with useMemo optimization
+- 6 items per page (configurable)
+- Client-side pagination for performance
+- Previous/Next navigation
+- Jump to page number
+- Total pages display
+
+Paginated Pages:
+- Admin Badges (6/page)
+- Admin Rewards (6/page)
+- Admin Destinations (6/page)
+- Admin Categories (6/page)
+- User Badges (6/page)
+- User Rewards (6/page)
+- Check-in History (10/page)
+
+
+12. IMAGE MANAGEMENT
+--------------------
+Upload System:
+- User avatars (profile photos)
+- Destination images (multiple)
+- Check-in photos (proof)
+- Review photos (gallery)
+- Reward images (thumbnails)
+- Badge icons (custom images)
+
+Storage:
+- Laravel Storage (public disk)
+- Path: storage/app/public/
+- Symlink: public/storage → storage/app/public
+- Image optimization (resize, compress)
+- Supported formats: JPG, PNG, WEBP
+- Max file size: 5MB
+
+Features:
+- Lazy loading for performance
+- Thumbnail generation
+- Primary image selection
+- Delete/replace images
+- Responsive images (srcset)
+
+
+13. NOTIFICATION SYSTEM
+-----------------------
+Toast Notifications (React Hot Toast):
+- Success: Green toast with checkmark
+- Error: Red toast with X icon
+- Info: Blue toast with info icon
+- Warning: Yellow toast with warning icon
+- Position: Top-right
+- Auto-dismiss: 3 seconds
+- Manual close button
+
+Notification Triggers:
+- Login success/failure
+- Check-in success/failure
+- Badge earned
+- Reward redeemed
+- Profile updated
+- Password changed
+- Destination saved/unsaved
+
+
+14. PERFORMANCE OPTIMIZATIONS
+------------------------------
+Backend (Laravel):
+- Database Indexing:
+  * 19 indexes on user_checkins alone
+  * Composite indexes for common queries
+  * Covering indexes for dashboard stats
+  * Foreign key indexes
+  
+- Query Optimization:
+  * Eager loading (with()) to prevent N+1 queries
+  * Select only needed columns
+  * Cache results for 5 seconds
+  * Paginate large datasets
+  
+- Cache Strategy:
+  * Redis for session storage
+  * Database cache for API responses
+  * 5-second TTL for ultra-fresh data
+  * Cache invalidation on updates
+
+Frontend (React):
+- React Query:
+  * staleTime: 1 second (instant perceived loading)
+  * refetchOnMount: true
+  * refetchOnWindowFocus: true
+  * Automatic background refetching
+  * Request deduplication
+  
+- Code Optimization:
+  * useMemo for filtered/sorted lists
+  * useCallback for event handlers
+  * Lazy loading components
+  * Image lazy loading
+  * Route-based code splitting
+  
+- Build Optimization:
+  * Vite for fast builds
+  * Terser for minification
+  * Tree-shaking unused code
+  * CSS purging with Tailwind
+  * Gzip compression
+
+
+15. SECURITY FEATURES
+---------------------
+Authentication:
+- Sanctum token-based auth
+- Token expiry (24 hours)
+- CSRF protection
+- Rate limiting (60 req/min)
+- Password hashing (bcrypt)
+
+Authorization:
+- Role-based access (admin/user)
+- Middleware guards
+- Route protection
+- API endpoint verification
+
+Data Protection:
+- Input validation
+- SQL injection prevention (Eloquent ORM)
+- XSS protection (React escaping)
+- CORS configuration
+- Encrypted passwords
+- Secure headers
+
+Privacy:
+- GDPR compliance (planned)
+- Data anonymization
+- Account deletion
+- Privacy policy
+
+
+16. ERROR HANDLING
+------------------
+Backend Errors:
+- 400 Bad Request (validation errors)
+- 401 Unauthorized (no token)
+- 403 Forbidden (insufficient permissions)
+- 404 Not Found (resource missing)
+- 422 Unprocessable Entity (validation)
+- 500 Internal Server Error (caught exceptions)
+
+Frontend Errors:
+- Network errors (axios interceptors)
+- Authentication errors (token expiry)
+- Validation errors (form feedback)
+- 404 errors (not found pages)
+- Fallback UI (error boundaries)
+
+User Feedback:
+- Toast notifications for all errors
+- Form field errors (red borders)
+- Helpful error messages
+- Retry buttons for network errors
+
+
+17. API ENDPOINTS SUMMARY
+--------------------------
+
+PUBLIC ROUTES (No Auth Required):
+POST   /api/register              - User registration
+POST   /api/login                 - User login
+POST   /api/check-email           - Email availability check
+GET    /api/destinations          - List all destinations
+GET    /api/destinations/{id}     - Destination details
+GET    /api/rewards               - List all rewards
+GET    /api/categories            - List categories
+POST   /api/address/postal-code   - Get postal code
+POST   /api/address/from-gps      - GPS to address
+
+USER ROUTES (Auth Required):
+POST   /api/logout                - Logout
+GET    /api/me                    - Get current user
+POST   /api/checkins              - Create check-in
+GET    /api/checkins              - User's check-ins
+GET    /api/checkins/stats        - Check-in statistics
+GET    /api/points/history        - Points transaction history
+GET    /api/user/badges           - User's earned badges
+POST   /api/user/badges/check     - Check badge eligibility
+GET    /api/user/badges/progress  - Badge progress tracking
+GET    /api/user/rewards/redemptions - Redemption history
+POST   /api/user/rewards/{id}/redeem - Redeem reward
+GET    /api/user/saved-destinations  - Saved destinations
+POST   /api/user/saved-destinations/toggle - Save/unsave
+POST   /api/user/change-password  - Change password
+
+ADMIN ROUTES (Admin Auth Required):
+GET    /api/admin/dashboard       - Admin dashboard data
+GET    /api/admin/users           - List all users
+POST   /api/admin/users           - Create user
+PUT    /api/admin/users/{id}      - Update user
+DELETE /api/admin/users/{id}      - Delete user
+GET    /api/badges                - List badges
+POST   /api/badges                - Create badge
+PUT    /api/badges/{id}           - Update badge
+DELETE /api/badges/{id}           - Delete badge
+POST   /api/badges/{id}/toggle-active - Activate/deactivate
+GET    /api/rewards               - List rewards
+POST   /api/rewards               - Create reward
+PUT    /api/rewards/{id}          - Update reward
+DELETE /api/rewards/{id}          - Delete reward
+POST   /api/destinations          - Create destination
+PUT    /api/destinations/{id}     - Update destination
+DELETE /api/destinations/{id}     - Delete destination
+POST   /api/destination-images    - Upload destination image
+DELETE /api/destination-images/{id} - Delete image
+
+================================================================================
+                         REACT COMPONENTS STRUCTURE
+================================================================================
+
+LAYOUT COMPONENTS
+-----------------
+- AppLayout.jsx - Main app wrapper with sidebar
+- AdminSidebar.jsx - Admin navigation sidebar
+- UserSidebar.jsx - User navigation sidebar
+- Header.jsx - Top navigation bar
+- Footer.jsx - Footer component
+
+AUTH COMPONENTS
+---------------
+- Login.jsx - Login form (redirects to /user/dashboard)
+- Register.jsx - Registration form (redirects to /user/dashboard)
+- ForgotPassword.jsx - Password reset request
+- ResetPassword.jsx - Password reset form
+
+ADMIN PAGES
+-----------
+- Dashboard.jsx - Admin analytics dashboard
+- Destinations.jsx - Destination CRUD with pagination (6/page)
+- DestinationView.jsx - Single destination details
+- DestinationDetails.jsx - Edit destination form
+- Categories.jsx - Category CRUD with pagination (6/page)
+- Badges.jsx - Badge CRUD with pagination (6/page)
+- Rewards.jsx - Reward CRUD with pagination (6/page)
+- Settings.jsx - System settings
+- AdminMap.jsx - Map view of all destinations
+
+USER PAGES
+----------
+- UserDashboard.jsx - User statistics and activity
+- MapExplorer.jsx - Interactive map with destinations
+- CheckIn.jsx - Check-in page (QR/GPS/Manual)
+- UserBadges.jsx - User's badge collection with pagination (6/page)
+- Rewards.jsx - Reward catalog with pagination (6/page)
+- UserSettings.jsx - User profile settings
+
+PUBLIC PAGES
+------------
+- Home.jsx - Landing page
+- About.jsx - About page
+- Contact.jsx - Contact form
+- Destinations.jsx - Public destination listing
+
+COMMON COMPONENTS
+-----------------
+- LoadingSpinner.jsx - Loading animation
+- ErrorBoundary.jsx - Error fallback
+- Card.jsx - Reusable card component
+- Button.jsx - Styled button component
+- Input.jsx - Form input component
+- Modal.jsx - Modal dialog
+- Pagination.jsx - Pagination controls
+- SearchBar.jsx - Search input
+- FilterDropdown.jsx - Filter component
+
+MAP COMPONENTS
+--------------
+- InteractiveMap.jsx - Leaflet map wrapper
+- DestinationMarker.jsx - Custom map marker
+- UserLocationMarker.jsx - User location pin
+- ClusterMarker.jsx - Marker clustering
+- MapControls.jsx - Zoom, pan controls
+
+QR COMPONENTS
+-------------
+- QRScanner.jsx - QR code scanner (html5-qrcode)
+- QRGenerator.jsx - QR code generator (qrcode.react)
+- QRDisplay.jsx - Display QR code
+
+DASHBOARD COMPONENTS
+--------------------
+- StatsCard.jsx - Statistics display card
+- RecentActivity.jsx - Activity feed
+- ChartWidget.jsx - Recharts wrapper
+- ProgressBar.jsx - Progress indicator
+- BadgeCard.jsx - Badge display card
+
+USER COMPONENTS
+---------------
+- ProfileCard.jsx - User profile display
+- AvatarUpload.jsx - Avatar image upload
+- AddressForm.jsx - Address input form
+- PasswordForm.jsx - Password change form
+
+================================================================================
+                         REACT HOOKS (CUSTOM)
+================================================================================
+
+useUserData.js
+--------------
+Functions:
+- useUserBadges() - Fetch user's earned badges
+  * Query Key: ['userBadges']
+  * Endpoint: /api/user/badges
+  * Returns: { badges, isLoading, error }
+
+- useCheckins(limit) - Fetch check-in history
+  * Query Key: ['checkins', limit]
+  * Endpoint: /api/checkins
+  * Returns: { checkins, isLoading, error }
+
+- useCheckinStats() - Fetch check-in statistics
+  * Query Key: ['checkinStats']
+  * Endpoint: /api/checkins/stats
+  * Returns: { stats, isLoading, error }
+
+- useSavedLocations() - Fetch saved destinations
+  * Query Key: ['savedLocations']
+  * Endpoint: /api/user/saved-destinations
+  * Returns: { savedDestinations, isLoading, error }
+
+- useDestinations() - Fetch all destinations
+  * Query Key: ['destinations']
+  * Endpoint: /api/destinations
+  * Returns: { destinations, isLoading, error }
+
+- usePrefetchUserData() - Prefetch all user data
+  * Prefetches: badges, checkins, stats, saved destinations
+  * Use: On dashboard mount for instant loading
+
+useCheckIn.jsx
+--------------
+Functions:
+- useCheckIn() - Handle check-in submission
+  * Mutation: POST /api/checkins
+  * Invalidates: ['checkins', 'checkinStats', 'userBadges']
+  * Returns: { mutate, isLoading, error }
+
+================================================================================
+                         LARAVEL CONTROLLERS
+================================================================================
+
+AuthController.php
+------------------
+Methods:
+- checkEmail(Request) - Check if email exists
+- register(Request) - User registration
+- login(Request) - User login with token
+- logout(Request) - Logout and revoke token
+- me(Request) - Get authenticated user
+- check(Request) - Verify token validity
+
+UserController.php
+------------------
+Methods:
+- index() - List all users (admin)
+- store(Request) - Create user (admin)
+- show(User) - Get user details (admin)
+- update(Request, User) - Update user (admin)
+- destroy(User) - Delete user (admin)
+- changePassword(Request) - Change user password (admin)
+- changeOwnPassword(Request) - Change own password (user)
+
+DestinationController.php
+--------------------------
+Methods:
+- index() - List destinations with filters
+- store(Request) - Create destination
+- show(Destination) - Get destination details
+- update(Request, Destination) - Update destination
+- destroy(Destination) - Delete destination
+
+DestinationCategoryController.php
+----------------------------------
+Methods:
+- index() - List categories
+- store(Request) - Create category
+- show(DestinationCategory) - Get category
+- update(Request, DestinationCategory) - Update category
+- destroy(DestinationCategory) - Delete category
+
+BadgeController.php
+-------------------
+Methods:
+- index() - List badges
+- store(Request) - Create badge
+- show(Badge) - Get badge details
+- update(Request, Badge) - Update badge
+- destroy(Badge) - Delete badge
+- toggleActive(Badge) - Activate/deactivate badge
+- updateOrder(Request) - Reorder badges
+- byRarity($rarity) - Get badges by rarity
+
+UserBadgeController.php
+-----------------------
+Methods:
+- index() - Get user's earned badges
+- checkBadges(Request) - Check badge eligibility
+- progress() - Get badge progress
+- toggleFavorite(Badge) - Favorite/unfavorite badge
+- toggleDisplay(Badge) - Show/hide badge on profile
+
+RewardController.php
+--------------------
+Methods:
+- index() - List rewards
+- store(Request) - Create reward
+- show(Reward) - Get reward details
+- update(Request, Reward) - Update reward
+- destroy(Reward) - Delete reward
+
+UserRewardRedemptionController.php
+-----------------------------------
+Methods:
+- index() - Get redemption history
+- redeem(Reward) - Redeem reward
+- change(UserRewardRedemption) - Update redemption status
+- getAvailableAtLocation(Request) - Get location-based rewards
+
+UserCheckinController.php
+--------------------------
+Methods:
+- index() - Get user's check-ins
+- store(Request) - Create check-in
+- stats() - Get check-in statistics
+- pointsHistory() - Get points transaction history
+
+UserSavedDestinationController.php
+-----------------------------------
+Methods:
+- index() - Get saved destinations
+- toggle(Request) - Save/unsave destination
+- checkSaved(Request) - Check if destination is saved
+
+AdminDashboardController.php
+-----------------------------
+Methods:
+- index() - Get dashboard analytics
+  Returns: total_users, total_destinations, total_checkins, 
+           total_points, recent_users, recent_checkins, 
+           popular_destinations, checkin_trends
+
+DestinationImageController.php
+-------------------------------
+Methods:
+- store(Request) - Upload destination image
+- destroy($id) - Delete destination image
+
+DestinationReviewController.php
+--------------------------------
+Methods:
+- index() - List reviews
+- store(Request) - Create review
+- show(DestinationReview) - Get review
+- update(Request, DestinationReview) - Update review
+- destroy(DestinationReview) - Delete review
+
+UserAddressController.php
+--------------------------
+Methods:
+- index() - Get user addresses
+- store(Request) - Create address
+- show(UserAddress) - Get address
+- update(Request, UserAddress) - Update address
+- destroy(UserAddress) - Delete address
+
+================================================================================
+                         LARAVEL MODELS
+================================================================================
+
+User.php
+--------
+Relationships:
+- hasMany(UserAddress) - User addresses
+- hasMany(UserCheckin) - Check-ins
+- hasMany(UserBadge) - Earned badges
+- hasMany(UserRewardRedemption) - Redemptions
+- hasMany(DestinationReview) - Reviews
+- hasMany(UserSavedDestination) - Saved destinations
+- hasMany(UserPointsTransaction) - Point transactions
+
+Attributes:
+- points (default 0)
+- level (default 1)
+- role (admin/user)
+- status (active/inactive)
+
+Methods:
+- isAdmin() - Check if user is admin
+- isActive() - Check if user is active
+- calculateLevel() - Calculate level from points
+
+Destination.php
+---------------
+Relationships:
+- belongsTo(DestinationCategory) - Category
+- hasMany(DestinationImage) - Images
+- hasMany(DestinationOperatingHour) - Operating hours
+- hasMany(UserCheckin) - Check-ins
+- hasMany(DestinationReview) - Reviews
+- hasMany(UserSavedDestination) - Saved by users
+- belongsToMany(Reward, 'reward_destinations') - Available rewards
+
+Attributes:
+- latitude, longitude (GPS coordinates)
+- checkin_points (default 10)
+- is_active (boolean)
+- qr_code_data_uri (base64 QR code)
+
+Methods:
+- getFullAddressAttribute() - Generate full address
+- getPrimaryImageAttribute() - Get main image
+- getAverageRatingAttribute() - Calculate avg rating
+- getTotalReviewsAttribute() - Count reviews
+
+Badge.php
+---------
+Relationships:
+- hasMany(UserBadge) - Users who earned
+- belongsToMany(User, 'user_badges') - Earned by users
+
+Attributes:
+- rarity (common/rare/epic/legendary)
+- requirement_type (checkins/unique_destinations/category/streak)
+- requirement_value (numeric threshold)
+- points_reward (bonus points)
+- is_active (boolean)
+
+Methods:
+- checkEligibility(User) - Check if user earned badge
+- awardToUser(User) - Award badge to user
+
+Reward.php
+----------
+Relationships:
+- belongsTo(RewardCategory) - Category
+- hasMany(UserRewardRedemption) - Redemptions
+- belongsToMany(Destination, 'reward_destinations') - Locations
+
+Attributes:
+- points_cost (redemption cost)
+- stock_quantity (available qty)
+- is_active (boolean)
+- is_featured (boolean)
+- expiry_days (days until expiry)
+
+Methods:
+- canRedeem(User) - Check if user has enough points
+- redeem(User) - Process redemption
+- decrementStock() - Reduce quantity
+
+UserBadge.php
+-------------
+Relationships:
+- belongsTo(User)
+- belongsTo(Badge)
+
+Attributes:
+- earned_at (timestamp)
+- progress_value (current progress)
+- progress_percentage (0-100)
+- is_favorite (boolean)
+- is_displayed (boolean on profile)
+
+UserCheckin.php
+---------------
+Relationships:
+- belongsTo(User)
+- belongsTo(Destination)
+- belongsTo(User, 'verified_by') - Admin who verified
+
+Attributes:
+- checkin_type (qr/gps/manual)
+- latitude, longitude
+- points_earned
+- photo_path
+- verification_status (pending/verified/rejected)
+
+Methods:
+- calculatePoints() - Calculate points from destination
+- verify(User) - Mark as verified by admin
+- reject(User) - Reject check-in
+
+UserRewardRedemption.php
+------------------------
+Relationships:
+- belongsTo(User)
+- belongsTo(Reward)
+
+Attributes:
+- redemption_code (unique 10-char code)
+- points_spent
+- redeemed_at (timestamp)
+- expires_at (calculated from expiry_days)
+- used_at (when code was used)
+- status (available/redeemed/used/expired)
+
+Methods:
+- generateCode() - Create unique code
+- markAsUsed() - Update status to used
+- isExpired() - Check if expired
+
+UserPointsTransaction.php
+--------------------------
+Relationships:
+- belongsTo(User)
+- morphTo(related) - Related model (checkin/redemption)
+
+Attributes:
+- transaction_type (earned/spent/bonus/penalty)
+- points (can be negative)
+- description
+
+Methods:
+- create(User, points, type, description) - Log transaction
+
+DestinationCategory.php
+-----------------------
+Relationships:
+- hasMany(Destination) - Destinations in category
+
+Attributes:
+- slug (URL-friendly name)
+- color (hex code)
+- icon (emoji or image)
+
+RewardCategory.php
+------------------
+Relationships:
+- hasMany(Reward) - Rewards in category
+
+Attributes:
+- slug (URL-friendly name)
+- color (hex code)
+- icon (emoji or image)
+
+DestinationImage.php
+--------------------
+Relationships:
+- belongsTo(Destination)
+
+Attributes:
+- image_path
+- caption
+- is_primary (boolean)
+
+DestinationOperatingHour.php
+-----------------------------
+Relationships:
+- belongsTo(Destination)
+
+Attributes:
+- day_of_week (0-6, 0=Sunday)
+- open_time (HH:MM:SS)
+- close_time (HH:MM:SS)
+- is_closed (boolean)
+
+DestinationReview.php
+---------------------
+Relationships:
+- belongsTo(Destination)
+- belongsTo(User)
+
+Attributes:
+- rating (1-5)
+- review_text
+- photos (JSON array)
+- helpful_count
+
+UserSavedDestination.php
+------------------------
+Relationships:
+- belongsTo(User)
+- belongsTo(Destination)
+
+Attributes:
+- created_at (saved date)
+
+UserAddress.php
+---------------
+Relationships:
+- belongsTo(User)
+
+Attributes:
+- address_type (home/work/other)
+- street_address
+- barangay, municipality, province
+- postal_code
+- latitude, longitude
+- is_primary (boolean)
+
+Methods:
+- getFullAddressAttribute() - Format full address
+
+================================================================================
+                         KEY FUNCTIONS & UTILITIES
+================================================================================
+
+FRONTEND UTILITIES (react-frontend/src/utils/)
+-----------------------------------------------
+
+api.js - API Service
+--------------------
+Class: ApiService
+Methods:
+- request(url, options) - Make authenticated API request
+- get(url) - GET request
+- post(url, data) - POST request
+- put(url, data) - PUT request
+- delete(url) - DELETE request
+- setToken(token) - Set auth token
+- getToken() - Get current token
+- clearToken() - Remove auth token
+
+Features:
+- Auto-detect API URL (localhost or local IP)
+- Token management (localStorage)
+- CSRF token handling
+- Request deduplication (1s cache)
+- Error handling with interceptors
+- Automatic retry on network failure
+
+auth.js - Authentication Helpers
+---------------------------------
+Functions:
+- isAuthenticated() - Check if user logged in
+- getUser() - Get current user from token
+- getUserRole() - Get user role (admin/user)
+- isAdmin() - Check if current user is admin
+- hasPermission(permission) - Check permission
+- redirectAfterLogin() - Redirect based on role
+
+gps.js - GPS & Location Helpers
+--------------------------------
+Functions:
+- getCurrentPosition() - Get user's GPS location
+- calculateDistance(lat1, lng1, lat2, lng2) - Haversine formula
+- isWithinRadius(userLat, userLng, destLat, destLng, radius) - Check proximity
+- formatDistance(meters) - Format distance string (e.g., "1.5 km")
+- getAddressFromCoords(lat, lng) - Reverse geocoding
+- validateCoordinates(lat, lng) - Validate GPS coords
+
+qr.js - QR Code Helpers
+-----------------------
+Functions:
+- generateQRCode(data) - Generate QR data URI
+- validateQRCode(data, expectedData) - Verify QR match
+- parseQRData(qrString) - Parse QR JSON data
+- createDestinationQR(destination) - QR for destination
+
+formatters.js - Data Formatting
+--------------------------------
+Functions:
+- formatDate(date, format) - Format date string
+- formatTime(time) - Format time (12h/24h)
+- formatPoints(points) - Format points with commas
+- formatCurrency(amount) - Format PHP currency
+- formatAddress(addressObj) - Format address string
+- truncateText(text, length) - Truncate with ellipsis
+- slugify(text) - Create URL slug
+
+validators.js - Input Validation
+---------------------------------
+Functions:
+- validateEmail(email) - Email format check
+- validatePassword(password) - Password strength
+- validatePhone(phone) - Philippine phone number
+- validatePostalCode(code) - Philippine postal code
+- validateCoordinates(lat, lng) - GPS validation
+- validateRequired(value) - Required field check
+
+storage.js - LocalStorage Helpers
+----------------------------------
+Functions:
+- set(key, value) - Store data
+- get(key) - Retrieve data
+- remove(key) - Delete data
+- clear() - Clear all data
+- setJSON(key, obj) - Store object as JSON
+- getJSON(key) - Retrieve JSON object
+
+NOTE: localStorage caching for user data removed to prevent stale data issues
+
+
+BACKEND UTILITIES (laravel-backend/app/Services/)
+-------------------------------------------------
+
+AddressService.php
+------------------
+Methods:
+- getPostalCode($address) - Get postal code from address
+- getAddressFromGPS($lat, $lng) - Reverse geocoding
+- formatAddress($components) - Format address string
+- validatePhilippineAddress($address) - Validate PH address
+
+QRCodeService.php
+-----------------
+Methods:
+- generate($data) - Generate QR code base64
+- generateForDestination(Destination) - Create destination QR
+- validate($qrData, $expectedData) - Verify QR code
+
+PointsService.php
+-----------------
+Methods:
+- award(User, $points, $reason) - Award points to user
+- deduct(User, $points, $reason) - Deduct points from user
+- calculateCheckInPoints(Destination) - Calculate check-in points
+- logTransaction(User, $type, $points, $description) - Log transaction
+
+BadgeService.php
+----------------
+Methods:
+- checkEligibility(User, Badge) - Check if user earned badge
+- awardBadge(User, Badge) - Award badge to user
+- updateProgress(User, Badge) - Update badge progress
+- checkAllBadges(User) - Check all badges for user
+
+NotificationService.php
+-----------------------
+Methods:
+- sendEmail(User, $template, $data) - Send email
+- sendSMS(User, $message) - Send SMS (planned)
+- notify(User, $type, $message) - Send notification
+
+ImageService.php
+----------------
+Methods:
+- upload($file, $path) - Upload image
+- delete($path) - Delete image file
+- resize($path, $width, $height) - Resize image
+- thumbnail($path, $size) - Generate thumbnail
+
+================================================================================
+                         MIDDLEWARE
+================================================================================
+
+BACKEND MIDDLEWARE (Laravel)
+-----------------------------
+
+app/Http/Middleware/AdminMiddleware.php
+- Checks if user role is 'admin'
+- Returns 403 Forbidden if not admin
+- Usage: ->middleware('admin')
+
+app/Http/Middleware/ActiveMiddleware.php
+- Checks if user status is 'active'
+- Returns 403 Forbidden if inactive/suspended
+- Usage: ->middleware('active')
+
+app/Http/Middleware/ThrottleMiddleware.php
+- Rate limiting (60 requests/minute)
+- Prevents brute force attacks
+- Usage: ->middleware('throttle:60,1')
+
+Built-in Laravel Middleware:
+- auth:sanctum - Sanctum authentication
+- verified - Email verification check
+- cors - CORS headers
+
+FRONTEND MIDDLEWARE (React)
+---------------------------
+
+ProtectedRoute.jsx
+- Checks authentication status
+- Redirects to /login if not authenticated
+- Verifies token validity
+
+AdminRoute.jsx
+- Checks if user is admin
+- Redirects to /user/dashboard if not admin
+- Ensures admin access only
+
+PublicRoute.jsx
+- Accessible to all users
+- No authentication required
+
+================================================================================
+                         ENVIRONMENT VARIABLES
+================================================================================
+
+BACKEND (.env)
+--------------
+APP_NAME=TravelQuest
+APP_ENV=local
+APP_KEY=base64:...
+APP_DEBUG=true
+APP_TIMEZONE=Asia/Manila
+APP_URL=http://localhost:8000
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=travelquest
+DB_USERNAME=root
+DB_PASSWORD=
+
+CACHE_STORE=database
+SESSION_DRIVER=database
+QUEUE_CONNECTION=database
+
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your_email@gmail.com
+MAIL_PASSWORD=your_app_password
+MAIL_ENCRYPTION=tls
+
+SANCTUM_STATEFUL_DOMAINS=localhost:5173,192.168.*.*:5173
+
+FRONTEND (.env)
+---------------
+VITE_API_URL=http://localhost:8000/api
+VITE_BASE_URL=http://localhost:8000
+VITE_APP_NAME=TravelQuest
+
+================================================================================
+                         INSTALLATION & SETUP
+================================================================================
+
+REQUIREMENTS
+------------
+- PHP 8.2 or higher
+- Composer 2.x
+- Node.js 18.x or higher
+- npm 9.x or higher
+- MySQL 8.0 or higher
+- Laragon (or XAMPP/WAMP)
+
+BACKEND SETUP
+-------------
+1. Navigate to laravel-backend folder
+2. Run: composer install
+3. Copy .env.example to .env
+4. Configure database credentials in .env
+5. Run: php artisan key:generate
+6. Run: php artisan migrate
+7. Run: php artisan db:seed (optional - seed test data)
+8. Run: php artisan storage:link
+9. Start server: php artisan serve (port 8000)
+
+FRONTEND SETUP
+--------------
+1. Navigate to react-frontend folder
+2. Run: npm install
+3. Copy .env.example to .env
+4. Configure API URL in .env
+5. Run: npm run dev (development server port 5173)
+6. Build: npm run build (production build)
+
+MOBILE ACCESS (WiFi)
+--------------------
+1. Find your local IP (ipconfig/ifconfig)
+2. Backend: php artisan serve --host=0.0.0.0 --port=8000
+3. Frontend: npm run dev -- --host
+4. Access: http://<your-ip>:5173
+   Example: http://192.168.1.100:5173
+
+TEST CREDENTIALS
+----------------
+Admin Account:
+- Email: admin@travelquest.com
+- Password: admin123
+
+User Account:
+- Email: user@travelquest.com
+- Password: user123
+
+================================================================================
+                         RECENT FIXES & UPDATES
+================================================================================
+
+PERFORMANCE FIXES
+-----------------
+✅ React Query installation for instant cached loading
+✅ Database indexing (28+ indexes) for fast queries
+✅ Laravel cache reduced to 5 seconds (ultra-fresh data)
+✅ Frontend staleTime set to 1 second
+✅ Removed localStorage caching (caused stale data)
+✅ useMemo optimization for filtered/paginated lists
+✅ useCallback for event handlers
+
+BUG FIXES
+---------
+✅ Points mismatch fixed (184,518 vs 50) - removed stale cache
+✅ Login redirect changed from /map to /user/dashboard
+✅ Pagination working on all pages (6 items/page)
+✅ Badges pagination fixed with useMemo
+✅ Duplicate code syntax error fixed
+✅ Delete button visibility on last card fixed
+✅ Badge title hover tooltip added
+
+CURRENT STATE
+-------------
+✅ 19 badges in database (verified)
+✅ All CRUD operations working
+✅ Pagination: 6 items per page across all admin/user pages
+✅ Console logging for debugging
+✅ Overflow issues resolved (z-index + overflow-visible)
+✅ Fresh data fetching on every mount and focus
+
+================================================================================
+                         TROUBLESHOOTING
+================================================================================
+
+COMMON ISSUES
+-------------
+
+1. "Token mismatch" error
+   Solution: Clear localStorage, logout/login again
+
+2. "CORS error"
+   Solution: Add your domain to SANCTUM_STATEFUL_DOMAINS in .env
+
+3. "Database connection refused"
+   Solution: Check MySQL service is running, verify credentials
+
+4. "500 Internal Server Error"
+   Solution: Check laravel.log in storage/logs/, run php artisan config:clear
+
+5. "Pagination not working"
+   Solution: Ensure useMemo is used for filteredData and paginatedData
+
+6. "Delete button not visible"
+   Solution: Check overflow-visible and z-index on card hover
+
+7. "Slow loading"
+   Solution: Check React Query staleTime, verify database indexes
+
+8. "Points not updating"
+   Solution: Clear localStorage cache, refetch data
+
+9. "QR scanner not working"
+   Solution: Enable camera permissions, use HTTPS or localhost
+
+10. "Map not loading"
+    Solution: Check internet connection for OpenStreetMap tiles
+
+================================================================================
+                         FUTURE ENHANCEMENTS (PLANNED)
+================================================================================
+
+SHORT TERM
+----------
+- Push notifications for badge achievements
+- Email verification for registration
+- SMS OTP for login
+- Social login (Google, Facebook)
+- Leaderboard system
+- User-to-user messaging
+- Friend system
+- Share achievements on social media
+
+MEDIUM TERM
+-----------
+- Mobile app (React Native)
+- Offline mode with sync
+- Advanced analytics dashboard
+- Export reports (PDF, CSV, Excel)
+- Multi-language support (English, Tagalog)
+- Dark mode
+- Accessibility improvements
+- Progressive Web App (PWA)
+
+LONG TERM
+---------
+- AI-powered destination recommendations
+- Machine learning for personalized rewards
+- Augmented Reality (AR) check-ins
+- Live events and challenges
+- Partner merchant portal
+- Payment gateway integration
+- Subscription tiers
+- White-label solution for other regions
+
+================================================================================
+                         CONTACT & SUPPORT
+================================================================================
+
+For technical issues or feature requests:
+- GitHub Issues: https://github.com/Jholand/web_system_II/issues
+- Email: support@travelquest.com (placeholder)
+
+Development Team:
+- Lead Developer: [Your Name]
+- Backend: Laravel Team
+- Frontend: React Team
+- Database: MySQL Team
+
+================================================================================
+                         END OF DOCUMENTATION
+================================================================================
+
+Last Updated: December 4, 2025
+Version: 1.0
+Documentation Status: Complete
+
+This document covers all aspects of the TravelQuest system from small functions
+to complete features, pages, components, models, controllers, hooks, utilities,
+middleware, API endpoints, database schema, and system architecture.
+
+For specific code examples or implementation details, refer to:
+- SYSTEM_DOCUMENTATION.md (detailed technical docs)
+- AUTH_SYSTEM_README.md (authentication flow)
+- BADGES_CRUD_IMPLEMENTATION.md (badge system)
+- CATEGORIES_CRUD_IMPLEMENTATION.md (category management)
+- GPS_TESTING_GUIDE.md (GPS features)
+- QUICK_START.md (setup guide)

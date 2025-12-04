@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { slideInFromRight, fadeIn } from '../../utils/animations';
-import AnimatedPage from '../../components/common/AnimatedPage';
 import DashboardTabs from '../../components/dashboard/DashboardTabs';
 import Button from '../../components/common/Button';
 import toast from 'react-hot-toast';
@@ -15,7 +14,6 @@ const DestinationView = () => {
 
   // Destination data state
   const [destination, setDestination] = useState(null);
-  const [loading, setLoading] = useState(true);
 
   // Active tab for sections
   const [activeSection, setActiveSection] = useState('basic');
@@ -78,10 +76,8 @@ const DestinationView = () => {
       };
       
       setDestination(mockData);
-      setLoading(false);
     } catch (error) {
       toast.error('Failed to load destination details');
-      setLoading(false);
     }
   };
 
@@ -96,11 +92,11 @@ const DestinationView = () => {
 
   const getCategoryDisplay = (category) => {
     const categories = {
-      hotel: { icon: '🏨', label: 'Hotel', color: 'bg-blue-100 text-blue-700' },
-      'agri farm': { icon: '🌾', label: 'Agricultural Farm', color: 'bg-green-100 text-green-700' },
-      'tourist spot': { icon: '⛰️', label: 'Tourist Spot', color: 'bg-purple-100 text-purple-700' },
-      restaurant: { icon: '🍽️', label: 'Restaurant', color: 'bg-orange-100 text-orange-700' },
-      attraction: { icon: '🎡', label: 'Attraction', color: 'bg-pink-100 text-pink-700' },
+      hotel: { icon: '🏨', label: 'Hotel', color: 'bg-teal-100 text-teal-700' },
+      'agri farm': { icon: '🌾', label: 'Agricultural Farm', color: 'bg-teal-100 text-teal-700' },
+      'tourist spot': { icon: '⛰️', label: 'Tourist Spot', color: 'bg-cyan-100 text-cyan-700' },
+      restaurant: { icon: '🍽️', label: 'Restaurant', color: 'bg-teal-100 text-teal-700' },
+      attraction: { icon: '🎡', label: 'Attraction', color: 'bg-cyan-100 text-cyan-700' },
     };
     return categories[category] || categories.hotel;
   };
@@ -114,31 +110,15 @@ const DestinationView = () => {
     return statuses[status] || statuses.active;
   };
 
-  if (loading) {
-    return (
-      <AnimatedPage className="min-h-screen bg-gray-50">
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mb-4"></div>
-            <p className="text-slate-600">Loading destination details...</p>
-          </div>
-        </div>
-      </AnimatedPage>
-    );
-  }
-
   if (!destination) {
     return (
-      <AnimatedPage className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50">
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
-            <p className="text-slate-600 mb-4">Destination not found</p>
-            <Button variant="primary" onClick={() => navigate('/admin/destinations')}>
-              Back to Destinations
-            </Button>
+            <p className="text-slate-600">Loading...</p>
           </div>
         </div>
-      </AnimatedPage>
+      </div>
     );
   }
 
@@ -146,7 +126,13 @@ const DestinationView = () => {
   const statusDisplay = getStatusDisplay(destination.status);
 
   return (
-    <AnimatedPage className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 relative">
+      {/* Decorative Background */}
+      <div className="absolute inset-0 opacity-5">
+        <div className="absolute top-20 left-10 w-72 h-72 bg-teal-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+        <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+      </div>
+      
       <ToastNotification />
       
       {/* Header */}
@@ -166,7 +152,7 @@ const DestinationView = () => {
               Back
             </Button>
             <div>
-              <h1 className="text-xl font-bold text-slate-800">{destination.name}</h1>
+              <h1 className="text-2xl font-semibold text-slate-900">{destination.name}</h1>
               <div className="flex items-center gap-2 mt-1">
                 <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${categoryDisplay.color}`}>
                   <span>{categoryDisplay.icon}</span>
@@ -197,9 +183,9 @@ const DestinationView = () => {
       {/* Main Content */}
       <main 
         className={`
+          relative z-10
           transition-all duration-300 ease-in-out
           ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
-          sm:ml-20 
           max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
         `}
       >
@@ -239,7 +225,7 @@ const DestinationView = () => {
           {/* Basic Info Section */}
           {activeSection === 'basic' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">Basic Information</h2>
+              <h2 className="text-xs font-medium text-slate-900 mb-6">Basic Information</h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Destination Name */}
@@ -247,7 +233,7 @@ const DestinationView = () => {
                   <label className="block text-sm font-semibold text-slate-600 mb-2">
                     Destination Name
                   </label>
-                  <p className="text-lg font-semibold text-slate-900">{destination.name}</p>
+                  <p className="text-sm font-normal text-slate-900">{destination.name}</p>
                 </div>
 
                 {/* Category */}
@@ -268,7 +254,7 @@ const DestinationView = () => {
                   </label>
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">🎯</span>
-                    <span className="text-2xl font-bold text-teal-600">{destination.pointsReward}</span>
+                    <span className="text-xs font-medium text-teal-600">{destination.pointsReward}</span>
                     <span className="text-slate-600">points</span>
                   </div>
                 </div>
@@ -314,7 +300,7 @@ const DestinationView = () => {
           {/* Location Section */}
           {activeSection === 'location' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">Location Details</h2>
+              <h2 className="text-xs font-medium text-slate-900 mb-6">Location Details</h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Full Address */}
@@ -336,7 +322,7 @@ const DestinationView = () => {
                   <label className="block text-sm font-semibold text-slate-600 mb-2">
                     City
                   </label>
-                  <p className="text-lg font-semibold text-slate-900">{destination.city}</p>
+                  <p className="text-sm font-normal text-slate-900">{destination.city}</p>
                 </div>
 
                 {/* Province */}
@@ -344,7 +330,7 @@ const DestinationView = () => {
                   <label className="block text-sm font-semibold text-slate-600 mb-2">
                     Province
                   </label>
-                  <p className="text-lg font-semibold text-slate-900">{destination.province}</p>
+                  <p className="text-sm font-normal text-slate-900">{destination.province}</p>
                 </div>
 
                 {/* Region */}
@@ -352,7 +338,7 @@ const DestinationView = () => {
                   <label className="block text-sm font-semibold text-slate-600 mb-2">
                     Region
                   </label>
-                  <p className="text-lg font-semibold text-slate-900">{destination.region}</p>
+                  <p className="text-sm font-normal text-slate-900">{destination.region}</p>
                 </div>
 
                 {/* GPS Coordinates */}
@@ -365,7 +351,7 @@ const DestinationView = () => {
                       </svg>
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-slate-900">GPS Coordinates</h3>
+                      <h3 className="text-sm font-normal text-slate-900">GPS Coordinates</h3>
                       <p className="text-sm text-slate-600">Exact location on map</p>
                     </div>
                   </div>
@@ -392,7 +378,7 @@ const DestinationView = () => {
           {activeSection === 'images' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-slate-900">Images & Photos</h2>
+                <h2 className="text-xs font-medium text-slate-900">Images & Photos</h2>
                 <span className="text-sm text-slate-600">
                   {destination.images.length} {destination.images.length === 1 ? 'image' : 'images'}
                 </span>
@@ -414,7 +400,7 @@ const DestinationView = () => {
                       ⭐ Primary Photo
                     </div>
                     <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-6">
-                      <p className="text-white text-lg font-semibold">
+                      <p className="text-white text-sm font-normal">
                         {destination.images.find(img => img.isPrimary).caption}
                       </p>
                     </div>
@@ -437,7 +423,7 @@ const DestinationView = () => {
                           className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-4">
-                          <p className="text-white text-sm font-medium">{image.caption}</p>
+                          <p className="text-white text-xs font-medium">{image.caption}</p>
                         </div>
                       </div>
                     </div>
@@ -451,7 +437,7 @@ const DestinationView = () => {
           {activeSection === 'amenities' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-slate-900">Amenities & Features</h2>
+                <h2 className="text-xs font-medium text-slate-900">Amenities & Features</h2>
                 <span className="text-sm text-slate-600">
                   {destination.amenities.length} {destination.amenities.length === 1 ? 'amenity' : 'amenities'}
                 </span>
@@ -474,7 +460,7 @@ const DestinationView = () => {
           {/* Operating Hours Section */}
           {activeSection === 'hours' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">Operating Hours</h2>
+              <h2 className="text-xs font-medium text-slate-900 mb-6">Operating Hours</h2>
               
               <div className="space-y-3">
                 {destination.operatingHours.map((schedule, index) => (
@@ -504,9 +490,9 @@ const DestinationView = () => {
                       </span>
                     ) : (
                       <div className="flex items-center gap-3">
-                        <span className="text-lg font-semibold text-teal-700">{schedule.opens}</span>
+                        <span className="text-sm font-normal text-teal-700">{schedule.opens}</span>
                         <span className="text-slate-400">—</span>
-                        <span className="text-lg font-semibold text-teal-700">{schedule.closes}</span>
+                        <span className="text-sm font-normal text-teal-700">{schedule.closes}</span>
                       </div>
                     )}
                   </div>
@@ -518,7 +504,7 @@ const DestinationView = () => {
           {/* Contact Info Section */}
           {activeSection === 'contact' && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">Contact Information</h2>
+              <h2 className="text-xs font-medium text-slate-900 mb-6">Contact Information</h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Phone */}
@@ -533,7 +519,7 @@ const DestinationView = () => {
                       Phone Number
                     </label>
                   </div>
-                  <p className="text-lg font-semibold text-slate-900 ml-13">{destination.contactNumber}</p>
+                  <p className="text-sm font-normal text-slate-900 ml-13">{destination.contactNumber}</p>
                 </div>
 
                 {/* Email */}
@@ -548,7 +534,7 @@ const DestinationView = () => {
                       Email Address
                     </label>
                   </div>
-                  <p className="text-lg font-semibold text-slate-900 ml-13">{destination.email}</p>
+                  <p className="text-sm font-normal text-slate-900 ml-13">{destination.email}</p>
                 </div>
 
                 {/* Website */}
@@ -567,7 +553,7 @@ const DestinationView = () => {
                     href={destination.website} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="text-lg font-semibold text-teal-600 hover:text-teal-700 ml-13 hover:underline"
+                    className="text-sm font-normal text-teal-600 hover:text-teal-700 ml-13 hover:underline"
                   >
                     {destination.website}
                   </a>
@@ -583,7 +569,7 @@ const DestinationView = () => {
                       </div>
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-xl font-bold text-slate-900 mb-2">Check-in QR Code</h3>
+                      <h3 className="text-xs font-medium text-slate-900 mb-2">Check-in QR Code</h3>
                       <p className="text-sm text-slate-600 mb-3">
                         Users can scan this QR code to check in at this destination and earn {destination.pointsReward} points.
                       </p>
@@ -611,7 +597,7 @@ const DestinationView = () => {
           )}
         </motion.div>
       </main>
-    </AnimatedPage>
+    </div>
   );
 };
 

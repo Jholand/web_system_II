@@ -10,7 +10,7 @@ const Button = ({
   className = '',
   disabled = false
 }) => {
-  const baseStyles = 'inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-offset-2';
+  const baseStyles = 'inline-flex items-center justify-center gap-2 font-normal rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-offset-2';
   
   const variants = {
     primary: 'bg-teal-500 hover:bg-teal-600 text-white shadow-sm hover:shadow-md focus:ring-teal-500',
