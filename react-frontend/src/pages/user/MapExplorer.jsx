@@ -28,11 +28,14 @@ const MapExplorer = React.memo(() => {
   const [nearbyDestinations, setNearbyDestinations] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
   const [showScanModal, setShowScanModal] = useState(false);
-  const [viewMode, setViewMode] = useState('map'); // 'map' or 'list'
+  const [locationViewMode, setLocationViewMode] = useState('all'); // 'all', 'nearby', 'saved'
+  const [mapViewMode, setMapViewMode] = useState('map'); // 'map' or 'list'
   const [activeFilter, setActiveFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [savedLocations, setSavedLocations] = useState([]);
   const [savedDestinationIds, setSavedDestinationIds] = useState(new Set());
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // ⚡ START FALSE - instant!
   const [isNavigating, setIsNavigating] = useState(false);
   const [navigationDestination, setNavigationDestination] = useState(null);
   const [distanceToDestination, setDistanceToDestination] = useState(null);
@@ -46,11 +49,29 @@ const MapExplorer = React.memo(() => {
   const [checkInDestination, setCheckInDestination] = useState(null);
   const [dataFetched, setDataFetched] = useState(false);
 
+  // Helper function to check if icon is an image path
+  const isImagePath = (icon) => {
+    if (!icon) return false;
+    return icon.includes('/') || icon.includes('\\') || 
+           icon.endsWith('.jpg') || icon.endsWith('.jpeg') || 
+           icon.endsWith('.png') || icon.endsWith('.gif') || 
+           icon.endsWith('.webp');
+  };
+
+  // Helper function to get full image URL
+  const getIconUrl = (icon) => {
+    if (isImagePath(icon)) {
+      const BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : `http://${window.location.hostname}:8000`;
+      return `${BASE_URL}/storage/${icon}`;
+    }
+    return icon; // Return emoji as is
+  };
+
   // Use network IP for mobile testing, or localhost for desktop
   // Check if using Laragon Apache or artisan serve
   const API_BASE_URL = useMemo(() => 
     window.location.hostname === 'localhost' 
-      ? 'http://localhost/web_system_II/laravel-backend/public/api'
+      ? 'http://localhost:8000/api'
       : `http://${window.location.hostname}:8000/api`,
     []
   );
@@ -63,6 +84,19 @@ const MapExplorer = React.memo(() => {
       setDataFetched(true);
     }
   }, [dataFetched]);
+
+  // Close category dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const dropdown = document.getElementById('category-dropdown-user');
+      const button = event.target.closest('.category-filter-button');
+      if (dropdown && !button && dropdown.style.display !== 'none') {
+        dropdown.style.display = 'none';
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (destinations.length > 0) {
@@ -127,10 +161,10 @@ const MapExplorer = React.memo(() => {
         try {
           const { data, timestamp } = JSON.parse(cached);
           const age = Date.now() - timestamp;
-          // Use cache if less than 10 minutes old
-          if (age < 600000) {
+          // ⚡ EXTREME: Use cache if less than 2 HOURS old!
+          if (age < 7200000 && data && data.length > 0) {
             setCategories(data);
-            return; // Skip API call
+            return; // ⚡ INSTANT - Skip API call!
           }
         } catch (e) {
           console.error('Cache parse error:', e);
@@ -166,11 +200,16 @@ const MapExplorer = React.memo(() => {
         try {
           const { data, timestamp } = JSON.parse(cached);
           const age = Date.now() - timestamp;
-          // Use cache if less than 5 minutes old
-          if (age < 300000) {
+          // ⚡ EXTREME: Use cache if less than 1 HOUR old!
+          if (age < 3600000 && data && data.length > 0) {
             setDestinations(data);
-            setLoading(false);
-            return; // Skip API call
+            setLoading(false); // ⚡ INSTANT - 0ms!
+            // Background refresh only if older than 30 minutes
+            if (age > 1800000) {
+              // Silent background refresh
+              fetchDestinationsFromAPI();
+            }
+            return; // ⚡ Skip API call - INSTANT LOAD!
           }
         } catch (e) {
           // Silent cache error
@@ -178,7 +217,15 @@ const MapExplorer = React.memo(() => {
       }
       
       // Fetch from API if cache miss/expired
-      setLoading(true);
+      await fetchDestinationsFromAPI();
+    } catch (error) {
+      console.error('Error in fetchDestinations:', error);
+      setLoading(false);
+    }
+  }, [API_BASE_URL]);
+
+  const fetchDestinationsFromAPI = async () => {
+    try {
       const response = await axios.get(`${API_BASE_URL}/destinations`);
       const data = response.data.data || [];
       
@@ -209,7 +256,7 @@ const MapExplorer = React.memo(() => {
       
       // Save to cache
       try {
-        localStorage.setItem(cacheKey, JSON.stringify({
+        localStorage.setItem('cached_map_destinations', JSON.stringify({
           data: transformedDestinations,
           timestamp: Date.now()
         }));
@@ -217,10 +264,10 @@ const MapExplorer = React.memo(() => {
         // Silent cache error
       }
     } catch (error) {
-      toast.error('Failed to load destinations');
+      console.error('Error fetching from API:', error);
       setLoading(false);
     }
-  }, [API_BASE_URL]);
+  };
 
   const fetchSavedDestinations = useCallback(async () => {
     try {
@@ -412,25 +459,22 @@ const MapExplorer = React.memo(() => {
     // Check if scanning for arrived destination or selected destination
     let targetDestination = arrivedDestination || selectedDestination;
     
-    // If no destination is selected, try to find it by QR code
+    // If no destination is selected, show error - user must select a destination first
     if (!targetDestination) {
-      console.log('No destination pre-selected, searching by QR code...');
-      targetDestination = destinations.find(dest => 
-        dest.qrCode?.trim().toLowerCase() === qrCode.trim().toLowerCase()
+      console.error('No destination selected before scanning!');
+      toast.error(
+        <div className="space-y-2">
+          <p className="font-bold">❌ No Destination Selected</p>
+          <p className="text-sm">Please select a destination from the map first, then scan its QR code.</p>
+          <p className="text-xs mt-2">📍 Tip: Click on a destination marker on the map to view details.</p>
+        </div>,
+        { 
+          duration: 6000,
+          style: { maxWidth: '400px' }
+        }
       );
-      
-      if (targetDestination) {
-        console.log('Found destination by QR code:', targetDestination);
-        setSelectedDestination(targetDestination);
-        toast.success(`Found destination: ${targetDestination.name}`, { duration: 2000 });
-      } else {
-        console.error('No destination found with QR code:', qrCode);
-        toast.error(`No destination found with QR code: ${qrCode}. Please make sure you're at the correct location.`, {
-          duration: 5000
-        });
-        setShowScanModal(false);
-        return;
-      }
+      setShowScanModal(false);
+      return;
     }
     
     console.log('Target destination:', targetDestination);
@@ -492,12 +536,12 @@ const MapExplorer = React.memo(() => {
       );
     }
 
-    // Verify QR code matches destination (use the qrCode from database)
+    // Verify QR code matches ONLY the selected destination (strict validation)
     const expectedQRCode = targetDestination.qrCode;
     
     console.log('Comparing QR codes:', { expected: expectedQRCode?.trim(), scanned: qrCode?.trim() });
     
-    // Case-insensitive comparison
+    // Case-insensitive comparison - MUST match the selected destination
     if (qrCode.trim().toLowerCase() === expectedQRCode.trim().toLowerCase()) {
       // QR code verified, now show review form
       setScannedQRCode(qrCode);
@@ -516,13 +560,24 @@ const MapExplorer = React.memo(() => {
       console.log('QR Code verified successfully!');
     } else {
       console.error('QR Code mismatch!', { expected: expectedQRCode, got: qrCode });
-      toast.error(`❌ Invalid QR code.\n\nExpected: ${expectedQRCode}\nGot: ${qrCode}\n\nPlease check the code and try again.`, {
-        duration: 5000,
-        style: {
-          fontSize: '14px',
-          whiteSpace: 'pre-line'
+      toast.error(
+        <div className="space-y-2">
+          <p className="font-bold">❌ Invalid QR Code</p>
+          <p className="text-sm">This QR code does not match <strong>{targetDestination.name}</strong></p>
+          <div className="text-xs mt-2 bg-red-100 p-2 rounded">
+            <p>Expected: <span className="font-mono font-bold">{expectedQRCode}</span></p>
+            <p>Scanned: <span className="font-mono font-bold">{qrCode}</span></p>
+          </div>
+          <p className="text-xs mt-2">💡 Make sure you're scanning the QR code at <strong>{targetDestination.name}</strong></p>
+        </div>,
+        {
+          duration: 7000,
+          style: {
+            maxWidth: '400px'
+          }
         }
-      });
+      );
+      setShowScanModal(false);
     }
   }, [destinations, nearbyDestinations, selectedDestination, arrivedDestination]);
 
@@ -628,13 +683,29 @@ const MapExplorer = React.memo(() => {
       } else if (error.response?.status === 401) {
         toast.error('Session expired. Please log in again.');
         navigate('/login');
+      } else if (error.response?.status === 422 || error.response?.status === 400) {
+        // Validation error or already checked in
+        const message = error.response?.data?.message || error.response?.data?.error;
+        toast.error(
+          <div className="space-y-2">
+            <p className="font-bold">❌ Check-in Failed</p>
+            <p className="text-sm">{message}</p>
+            {message.includes('already checked in') && (
+              <p className="text-xs mt-2">💡 You can check in once per day per destination. Come back tomorrow!</p>
+            )}
+          </div>,
+          { 
+            duration: 6000,
+            style: { maxWidth: '400px' }
+          }
+        );
       } else if (error.response?.data?.message) {
         toast.error(error.response.data.message);
       } else {
         toast.error('Failed to submit check-in. Please try again.');
       }
     }
-  }, [user, API_BASE_URL]);
+  }, [user, API_BASE_URL, navigate]);
 
   const handleLogout = useCallback(() => {
     if (logout) logout();
@@ -646,10 +717,40 @@ const MapExplorer = React.memo(() => {
     setSidebarCollapsed(collapsed);
   }, []);
 
-  const filteredDestinations = useMemo(() => {
-    if (activeFilter === 'all') return nearbyDestinations;
-    return nearbyDestinations.filter(dest => dest.category === activeFilter);
-  }, [activeFilter, nearbyDestinations]);
+  const displayedDestinations = useMemo(() => {
+    let destinations = [];
+    if (locationViewMode === 'all') destinations = nearbyDestinations;
+    else if (locationViewMode === 'nearby') destinations = nearbyDestinations.filter(dest => dest.distance && dest.distance <= 50);
+    else if (locationViewMode === 'saved') destinations = savedLocations;
+    else destinations = nearbyDestinations;
+
+    // Apply category filter
+    if (selectedCategory && selectedCategory !== 'all') {
+      destinations = destinations.filter(dest => 
+        dest.categoryName === selectedCategory || 
+        dest.category === selectedCategory ||
+        dest.categoryName?.toLowerCase() === selectedCategory.toLowerCase() ||
+        dest.category?.toLowerCase() === selectedCategory.toLowerCase()
+      );
+    }
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      destinations = destinations.filter(dest => 
+        dest.name?.toLowerCase().includes(query) ||
+        dest.category?.toLowerCase().includes(query) ||
+        dest.categoryName?.toLowerCase().includes(query) ||
+        dest.description?.toLowerCase().includes(query) ||
+        dest.address?.toLowerCase().includes(query)
+      );
+    }
+
+    return destinations;
+  }, [locationViewMode, nearbyDestinations, savedLocations, searchQuery, selectedCategory]);
+
+  // Map shows the same filtered destinations as the list
+  const filteredDestinations = displayedDestinations;
 
   const getCategoryIcon = (category) => {
     switch(category) {
@@ -666,56 +767,63 @@ const MapExplorer = React.memo(() => {
       case 'hotel':
         return 'bg-blue-500';
       case 'agri farm':
-        return 'bg-green-500';
+        return 'bg-teal-500';
       case 'tourist spot':
         return 'bg-purple-500';
       default:
-        return 'bg-gray-500';
+        return 'bg-cyan-500';
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 relative">
+    <div className="min-h-screen bg-white relative pb-20 sm:pb-0">
+      {/* Decorative Background Pattern */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-teal-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+          <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+          <div className="absolute bottom-20 left-1/2 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000"></div>
+        </div>
+        {/* Dot Pattern */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #0d9488 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+      </div>
+
       <ToastNotification />
       
       {/* Main Content Container - Will be blurred when modal is open */}
       <div className={`transition-all duration-300 ${(showReviewModal || showScanModal || showQRModal || selectedDestination) ? 'blur-sm' : ''}`}>
-        {/* Decorative Background */}
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-teal-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
-          <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
-        </div>
         
-        <UserHeader user={user} onLogout={handleLogout} />
-
         <UserDashboardTabs 
           onCollapseChange={handleSidebarCollapse}
           onScannerClick={() => setShowScanModal(true)}
         />
 
       {/* Main Content */}
-      <main 
-        className={`
-          relative z-10
-          transition-all duration-300 ease-in-out
-          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
-          max-w-7xl mx-auto px-4 sm:px-6 pt-24 sm:py-8 pb-32 sm:pb-20 md:pb-8
-        `}
-      >
-        {/* Page Title */}
-        <motion.h2 
-          className="text-3xl font-bold text-slate-900 mb-8"
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-        >
-          Your Adventure
-        </motion.h2>
+      <div className={`transition-all duration-300 pb-16 md:pb-0 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+        {/* Page Header */}
+        <header className="bg-gradient-to-r from-teal-500 to-cyan-600 shadow-lg mt-14 md:mt-16 lg:mt-0 md:sticky md:top-16 lg:sticky lg:top-0 z-30">
+          <div className="px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                <svg className="w-7 h-7 text-white drop-shadow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-1">Explore Map</h1>
+                <p className="text-sm text-teal-50 mt-1">Discover destinations and navigate your adventure</p>
+              </div>
+            </div>
+          </div>
+        </header>
 
-        {/* Navigation Tracker */}
+        {/* Main Content Area */}
+        <main className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto mt-6">
+
+            {/* Navigation Tracker */}
         {isNavigating && navigationDestination && (
           <motion.div 
-            className="bg-gradient-to-r from-teal-500 to-blue-500 rounded-2xl p-6 border-2 border-teal-600 mb-6 shadow-xl"
+            className="bg-gradient-to-r from-teal-500 to-blue-500 rounded-2xl p-6 border border-teal-600 mb-6 shadow-xl relative z-50 pointer-events-auto"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 100 }}
@@ -756,7 +864,7 @@ const MapExplorer = React.memo(() => {
               </div>
               <button
                 onClick={handleStopNavigation}
-                className="px-6 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-semibold transition-all border-2 border-white/50 flex items-center gap-2"
+                className="px-6 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-semibold transition-all border-2 border-white/50 flex items-center gap-2 pointer-events-auto relative z-10"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -783,7 +891,7 @@ const MapExplorer = React.memo(() => {
 
         {/* Explore Section */}
         <motion.div 
-          className="bg-white rounded-2xl p-6 border mb-6"
+          className="bg-white rounded-2xl p-6 border border-teal-200 shadow-sm mb-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
@@ -794,9 +902,9 @@ const MapExplorer = React.memo(() => {
           {/* View Toggle */}
           <div className="flex items-center gap-4 mb-6">
             <button
-              onClick={() => setViewMode('map')}
+              onClick={() => setMapViewMode('map')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                viewMode === 'map'
+                mapViewMode === 'map'
                   ? 'bg-teal-500 text-white'
                   : 'bg-gray-100 text-slate-700 hover:bg-gray-200'
               }`}
@@ -808,9 +916,9 @@ const MapExplorer = React.memo(() => {
             </button>
             
             <button
-              onClick={() => setViewMode('list')}
+              onClick={() => setMapViewMode('list')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                viewMode === 'list'
+                mapViewMode === 'list'
                   ? 'bg-teal-500 text-white'
                   : 'bg-gray-100 text-slate-700 hover:bg-gray-200'
               }`}
@@ -845,7 +953,7 @@ const MapExplorer = React.memo(() => {
             className="lg:col-span-2"
             variants={slideInFromBottom}
           >
-            <div className="bg-white rounded-2xl p-6 border">
+            <div className="bg-white rounded-2xl p-6 border border-teal-200 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -855,7 +963,7 @@ const MapExplorer = React.memo(() => {
               <p className="text-sm text-slate-600 mb-4">Zoom: 14x | Tap locations for details & souvenirs</p>
 
               {/* Map Container with proper height */}
-              <div className="h-[500px] bg-blue-50 rounded-lg relative overflow-hidden border border-gray-200">
+              <div className="h-[700px] bg-blue-50 rounded-lg relative overflow-hidden border border-teal-200 shadow-sm" style={{ zIndex: 0 }}>
                 {loading ? (
                   <div className="absolute inset-0 flex items-center justify-center bg-blue-50">
                     <div className="text-center">
@@ -885,136 +993,12 @@ const MapExplorer = React.memo(() => {
                 
                 {/* Location Count Overlay */}
                 {userLocation && !isNavigating && (
-                  <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 border">
+                  <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 border border-slate-200">
                     <p className="text-sm font-medium text-slate-900">{filteredDestinations.length} locations visible</p>
                     <p className="text-xs text-slate-600">Click on markers to see details & navigate</p>
                   </div>
                 )}
               </div>
-
-              {/* Nearest Destinations List Below Map */}
-              {filteredDestinations.length > 0 && (
-                <div className="mt-4">
-                  <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    </svg>
-                    Nearest to You
-                  </h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    {filteredDestinations.slice(0, 4).map((dest) => (
-                      <div
-                        key={dest.id}
-                        onClick={() => setSelectedDestination(dest)}
-                        className="p-3 border rounded-lg hover:bg-teal-50 hover:border-teal-200 transition-all cursor-pointer group bg-white relative"
-                      >
-                        {/* Heart button */}
-                        <button
-                          onClick={(e) => toggleSaveDestination(dest.id, e)}
-                          className="absolute top-2 right-2 p-1.5 bg-black/30 backdrop-blur-sm rounded-full hover:bg-black/50 transition-all z-10"
-                        >
-                          <svg
-                            className={`w-4 h-4 transition-colors ${
-                              savedDestinationIds.has(dest.id)
-                                ? 'fill-red-500 text-red-500'
-                                : 'fill-none text-white stroke-white'
-                            }`}
-                            stroke="currentColor"
-                            strokeWidth={2}
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
-                          </svg>
-                        </button>
-                        <div className="flex items-start gap-2">
-                          <div className={`w-10 h-10 ${getCategoryColor(dest.category)} rounded-lg flex items-center justify-center text-white text-lg flex-shrink-0 group-hover:scale-110 transition-transform`}>
-                            {getCategoryIcon(dest.category)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h5 className="font-semibold text-slate-900 text-xs truncate group-hover:text-teal-600 transition-colors">{dest.name}</h5>
-                            <p className="text-xs text-slate-500 truncate">{dest.categoryName}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs text-purple-600 font-bold">
-                                {dest.distance?.toFixed(1)} km
-                              </span>
-                              <span className="text-xs text-teal-600 font-semibold">
-                                🪙 {dest.points} pts
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Nearby Destinations - 2 columns below map */}
-              {!selectedDestination && !isNavigating && filteredDestinations.length > 0 && (
-                <div className="mt-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                      <svg className="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                      </svg>
-                      Nearby Destinations
-                    </h4>
-                    <span className="px-3 py-1 bg-teal-100 text-teal-700 rounded-full text-sm font-bold">
-                      {filteredDestinations.length}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 max-h-96 overflow-y-auto scrollbar-hide">
-                    {filteredDestinations.map((dest) => (
-                      <div
-                        key={dest.id}
-                        onClick={() => setSelectedDestination(dest)}
-                        className="p-4 border rounded-lg hover:bg-teal-50 hover:border-teal-200 transition-all cursor-pointer group bg-white relative"
-                      >
-                        {/* Heart button */}
-                        <button
-                          onClick={(e) => toggleSaveDestination(dest.id, e)}
-                          className="absolute top-3 right-3 p-1.5 bg-black/30 backdrop-blur-sm rounded-full hover:bg-black/50 transition-all z-10"
-                        >
-                          <svg
-                            className={`w-5 h-5 transition-colors ${
-                              savedDestinationIds.has(dest.id)
-                                ? 'fill-red-500 text-red-500'
-                                : 'fill-none text-white stroke-white'
-                            }`}
-                            stroke="currentColor"
-                            strokeWidth={2}
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
-                          </svg>
-                        </button>
-                        <div className="flex items-start gap-3">
-                          <div className={`w-12 h-12 ${getCategoryColor(dest.category)} rounded-xl flex items-center justify-center text-white text-xl flex-shrink-0 group-hover:scale-110 transition-transform`}>
-                            {getCategoryIcon(dest.category)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h5 className="font-semibold text-slate-900 text-sm truncate group-hover:text-teal-600 transition-colors">{dest.name}</h5>
-                            <p className="text-xs text-slate-500 mb-2 truncate">{dest.categoryName}</p>
-                            {dest.distance && (
-                              <div className="flex items-center gap-2 text-xs">
-                                <span className="flex items-center gap-1 text-purple-600 font-bold">
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                  </svg>
-                                  {dest.distance.toFixed(1)} km
-                                </span>
-                                <span className="flex items-center gap-1 text-teal-600 font-semibold">
-                                  🪙 {dest.points} pts
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </motion.div>
 
@@ -1024,57 +1008,233 @@ const MapExplorer = React.memo(() => {
             variants={slideInFromRight}
           >
             {/* Stats Card */}
-            {!isNavigating && (
-              <div className="bg-gradient-to-br from-teal-50 to-blue-50 rounded-xl border border-teal-200 p-4">
-                <h3 className="font-semibold text-slate-900 mb-3 text-sm">Your Exploration</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-700">Destinations Found</span>
-                    <span className="text-lg font-bold text-teal-600">{filteredDestinations.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-700">Total in Area</span>
-                    <span className="text-lg font-bold text-blue-600">{nearbyDestinations.length}</span>
-                  </div>
-                  {filteredDestinations.length > 0 && filteredDestinations[0]?.distance && (
-                    <div className="bg-white/50 rounded-lg p-2 mt-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-slate-700">Nearest Location</span>
-                        <span className="text-sm font-bold text-purple-600">
-                          {filteredDestinations[0]?.distance?.toFixed(1)} km
-                        </span>
-                      </div>
-                      <p className="text-xs font-semibold text-slate-900 truncate">
-                        {filteredDestinations[0]?.name}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {filteredDestinations[0]?.categoryName}
-                      </p>
-                    </div>
+            <div className="bg-gradient-to-br from-teal-50 to-blue-50 rounded-xl border border-teal-200 shadow-sm p-6">
+              <h3 className="font-semibold text-slate-900 mb-4">Map Statistics</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-700">Total Locations</span>
+                  <span className="text-lg font-bold text-teal-600">{nearbyDestinations.length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-700">Nearby (50km)</span>
+                  <span className="text-lg font-bold text-blue-600">{nearbyDestinations.filter(d => d.distance && d.distance <= 50).length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-700">Saved</span>
+                  <span className="text-lg font-bold text-purple-600">{savedLocations.length}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* View Mode Tabs & Location List */}
+            <div className="bg-white rounded-xl border border-teal-200 shadow-sm p-4 relative z-10">
+              {/* Search Bar */}
+              <div className="mb-3">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search destinations..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-4 py-2 pl-10 text-sm border border-teal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  />
+                  <svg className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   )}
                 </div>
               </div>
-            )}
+              {/* Category Filter - Custom Dropdown */}
+              <div className="mb-4 relative z-50 pointer-events-auto">
+                <div
+                  onClick={() => {
+                    const dropdown = document.getElementById('category-dropdown-user');
+                    if (dropdown) {
+                      dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+                    }
+                  }}
+                  className="category-filter-button w-full px-4 py-2 text-sm border border-teal-200 rounded-lg bg-white cursor-pointer flex items-center justify-between hover:border-teal-400 transition-colors"
+                  style={{ pointerEvents: 'auto' }}
+                >
+                  <div className="flex items-center gap-2">
+                    {selectedCategory === 'all' ? (
+                      <span>All Categories</span>
+                    ) : (
+                      <>
+                        {(() => {
+                          const cat = categories.find(c => c.name === selectedCategory);
+                          if (!cat) return <span>All Categories</span>;
+                          const isImg = isImagePath(cat.icon);
+                          return (
+                            <>
+                              {isImg ? (
+                                <img src={getIconUrl(cat.icon)} alt={cat.name} className="w-5 h-5 rounded object-cover" />
+                              ) : (
+                                <span>{cat.icon}</span>
+                              )}
+                              <span>{cat.name}</span>
+                            </>
+                          );
+                        })()}
+                      </>
+                    )}
+                  </div>
+                  <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+                
+                {/* Dropdown Menu */}
+                <div
+                  id="category-dropdown-user"
+                  style={{ display: 'none' }}
+                  className="absolute w-full mt-1 bg-white border border-teal-200 rounded-lg shadow-lg max-h-64 overflow-y-auto z-[60]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div
+                    onClick={() => {
+                      setSelectedCategory('all');
+                      document.getElementById('category-dropdown-user').style.display = 'none';
+                    }}
+                    className={`px-4 py-2 hover:bg-teal-50 cursor-pointer transition-colors text-sm ${selectedCategory === 'all' ? 'bg-teal-100' : ''}`}
+                  >
+                    All Categories
+                  </div>
+                  {categories.map((cat) => {
+                    const isImg = isImagePath(cat.icon);
+                    return (
+                      <div
+                        key={cat.id}
+                        onClick={() => {
+                          setSelectedCategory(cat.name);
+                          document.getElementById('category-dropdown-user').style.display = 'none';
+                        }}
+                        className={`px-4 py-2 hover:bg-teal-50 cursor-pointer transition-colors flex items-center gap-2 text-sm ${selectedCategory === cat.name ? 'bg-teal-100' : ''}`}
+                      >
+                        {isImg ? (
+                          <img src={getIconUrl(cat.icon)} alt={cat.name} className="w-5 h-5 rounded object-cover flex-shrink-0" />
+                        ) : (
+                          <span className="flex-shrink-0">{cat.icon}</span>
+                        )}
+                        <span>{cat.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => setLocationViewMode('all')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                    locationViewMode === 'all'
+                      ? 'bg-teal-500 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:shadow-sm'
+                  }`}
+                >
+                  All ({nearbyDestinations.length})
+                </button>
+                <button
+                  onClick={() => setLocationViewMode('nearby')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                    locationViewMode === 'nearby'
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:shadow-sm'
+                  }`}
+                >
+                  📍 Nearby ({nearbyDestinations.filter(d => d.distance && d.distance <= 50).length})
+                </button>
+                <button
+                  onClick={() => setLocationViewMode('saved')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                    locationViewMode === 'saved'
+                      ? 'bg-pink-500 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:shadow-sm'
+                  }`}
+                >
+                  ❤️ Saved ({savedLocations.length})
+                </button>
+              </div>
 
-            {/* Filter Locations */}
-            <FilterSidebar
-              activeFilter={activeFilter}
-              onFilterChange={setActiveFilter}
-              destinations={nearbyDestinations}
-            />
-
-            {/* Saved Locations */}
-            <SavedLocations
-              locations={savedLocations}
-              calculateDistance={calculateDistance}
-              userLocation={userLocation}
-              onLocationClick={setSelectedDestination}
-              savedDestinationIds={savedDestinationIds}
-              onToggleSave={toggleSaveDestination}
-            />
+              {/* Locations List */}
+              <h3 className="font-semibold text-slate-900 mb-3 text-sm">
+                {locationViewMode === 'all' ? 'All Locations' : locationViewMode === 'nearby' ? 'Nearby Locations' : 'Saved Locations'}
+              </h3>
+              <div className="space-y-3 max-h-96 overflow-y-auto scrollbar-hide">
+                {displayedDestinations.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500">
+                    <div className="text-4xl mb-2">
+                      {locationViewMode === 'nearby' ? '📍' : locationViewMode === 'saved' ? '❤️' : '🗺️'}
+                    </div>
+                    <p className="text-sm">
+                      {locationViewMode === 'nearby' 
+                        ? 'No destinations nearby. Move around to discover more!' 
+                        : locationViewMode === 'saved' 
+                        ? 'No saved destinations yet. Click ❤️ to save!' 
+                        : 'No destinations found'}
+                    </p>
+                  </div>
+                ) : (
+                  displayedDestinations.map((dest) => (
+                    <div
+                      key={dest.id}
+                      onClick={() => setSelectedDestination(dest)}
+                      className="p-4 border border-teal-200 rounded-lg hover:bg-teal-50 hover:border-teal-400 hover:shadow-md transition-all cursor-pointer group bg-white shadow-sm"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-10 h-10 ${getCategoryColor(dest.category)} rounded-lg flex items-center justify-center text-white text-xl flex-shrink-0 group-hover:scale-110 transition-transform`}>
+                          {getCategoryIcon(dest.category)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between mb-1">
+                            <h4 className="font-semibold text-slate-900 text-sm truncate group-hover:text-teal-600 transition-colors">{dest.name}</h4>
+                            <button
+                              onClick={(e) => toggleSaveDestination(dest.id, e)}
+                              className="ml-2 p-1 rounded-lg transition-colors flex-shrink-0"
+                            >
+                              <svg
+                                className={`w-4 h-4 transition-colors ${
+                                  savedDestinationIds.has(dest.id)
+                                    ? 'fill-red-500 text-red-500'
+                                    : 'fill-none text-slate-400 hover:text-red-500'
+                                }`}
+                                stroke="currentColor"
+                                strokeWidth={2}
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-2">
+                            <span>{getCategoryIcon(dest.category)}</span>
+                            <span>{dest.categoryName || dest.category}</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs">
+                            <span className="text-teal-600 font-semibold">🪙 {dest.points} pts</span>
+                            {dest.distance && (
+                              <span className="text-blue-600 font-semibold">📍 {dest.distance.toFixed(1)} km</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </motion.div>
         </motion.div>
-      </main>
+        </main>
+      </div>
       </div>
       {/* End of blurred content container */}
 
@@ -1105,7 +1265,7 @@ const MapExplorer = React.memo(() => {
           }
         >
           <div className="text-center space-y-6">
-            <div className="w-24 h-24 bg-gradient-to-br from-teal-100 to-green-100 rounded-full flex items-center justify-center mx-auto">
+            <div className="w-24 h-24 bg-gradient-to-br from-teal-100 to-cyan-100 rounded-full flex items-center justify-center mx-auto">
               <span className="text-5xl">{getCategoryIcon(arrivedDestination.category)}</span>
             </div>
 
@@ -1140,13 +1300,14 @@ const MapExplorer = React.memo(() => {
       )}
 
       {/* Selected Destination Details Modal */}
-      {selectedDestination && !isNavigating && (
+      {selectedDestination && (
         <DestinationDetail
           destination={selectedDestination}
           userLocation={userLocation}
           onClose={() => setSelectedDestination(null)}
-          onCheckIn={() => setShowScanModal(true)}
-          onNavigate={handleStartNavigation}
+          onCheckIn={() => !isNavigating && setShowScanModal(true)}
+          onNavigate={(dest) => !isNavigating && handleStartNavigation(dest)}
+          isNavigating={isNavigating}
           isSaved={savedDestinationIds.has(selectedDestination.id)}
           onToggleSave={(id) => toggleSaveDestination(id)}
         />

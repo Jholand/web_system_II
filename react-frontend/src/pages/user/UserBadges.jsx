@@ -8,6 +8,7 @@ import ToastNotification from '../../components/common/ToastNotification';
 import Modal from '../../components/common/Modal';
 import QRScanner from '../../components/qr/QRScanner';
 import CheckInReview from '../../components/user/CheckInReview';
+import SkeletonLoader from '../../components/common/SkeletonLoader';
 import { useCheckIn } from '../../hooks/useCheckIn.jsx';
 import toast from 'react-hot-toast';
 // ⚡ REACT QUERY - INSTANT CACHED LOADING (TikTok/Facebook speed)
@@ -136,40 +137,34 @@ const UserBadges = React.memo(() => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 relative">
-      {/* Tourism Background Pattern */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute inset-0 opacity-[0.02]" style={{ 
-          backgroundImage: 'radial-gradient(circle, #10b981 1px, transparent 1px)', 
-          backgroundSize: '40px 40px' 
-        }} />
+    <div className="min-h-screen bg-white relative pb-20 sm:pb-0">
+      {/* Decorative Background Pattern */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-teal-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+          <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+          <div className="absolute bottom-20 left-1/2 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000"></div>
+        </div>
+        {/* Dot Pattern */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #0d9488 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
       </div>
 
       <ToastNotification />
-      <UserHeader user={user} onLogout={handleLogout} />
       <UserDashboardTabs onCollapseChange={handleSidebarCollapse} onScannerClick={handleScannerClick} />
 
       {/* Main Content */}
-      <main 
-        className={`relative z-10 transition-all duration-150 ${
-          sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'
-        } max-w-7xl mx-auto px-4 sm:px-6 pt-20 sm:pt-24 md:pt-28 pb-32 sm:pb-20 md:pb-8`}
-      >
+      <div className={`transition-all duration-300 pb-16 md:pb-0 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
         {/* Page Header */}
-        <div className="mb-6 sm:mb-8 animate-fade-in">
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-5 sm:p-6 shadow-md border border-emerald-100">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-              <div className="flex items-center gap-3 sm:gap-4 flex-1">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-500/30">
-                  <Award className="w-7 h-7 sm:w-8 sm:h-8 text-white drop-shadow" strokeWidth={2.5} />
+        <header className="bg-gradient-to-r from-teal-500 to-cyan-600 shadow-lg mt-14 md:mt-16 lg:mt-0 md:sticky md:top-16 lg:sticky lg:top-0 z-30">
+          <div className="px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <Award className="w-7 h-7 text-white drop-shadow" strokeWidth={2.5} />
                 </div>
-                <div className="flex-1">
-                  <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                    Badge Collection
-                  </h1>
-                  <p className="text-sm text-gray-600 mt-0.5">
-                    Track your achievements and unlock exclusive badges
-                  </p>
+                <div>
+                  <h1 className="text-3xl font-bold text-white mb-1">Badge Collection</h1>
+                  <p className="text-sm text-teal-50 mt-1">Track your achievements and unlock exclusive badges</p>
                 </div>
               </div>
               <button
@@ -178,20 +173,22 @@ const UserBadges = React.memo(() => {
                   if (refreshUser) refreshUser();
                   toast.success('Refreshing badges...');
                 }}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-lg transition-all duration-75 shadow-md hover:shadow-lg active:scale-95"
+                className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all duration-150 backdrop-blur-sm border border-white/20"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                <span className="hidden sm:inline font-semibold">Refresh</span>
+                <span className="hidden sm:inline font-medium">Refresh</span>
               </button>
             </div>
           </div>
-        </div>
+        </header>
 
-        {/* Summary Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 animate-fade-in" style={{ animationDelay: '50ms' }}>
-          <div className="group bg-white rounded-2xl p-6 border border-amber-100 shadow-sm hover:shadow-lg transition-all duration-150 hover:-translate-y-0.5">
+      {/* Main Content Area */}
+      <main className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto mt-6">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="group bg-white rounded-2xl p-6 border border-teal-200 shadow-sm hover:shadow-md transition-all duration-150 hover:-translate-y-0.5">
             <div className="flex items-start justify-between mb-3">
               <div className="w-12 h-12 bg-amber-500/10 rounded-xl flex items-center justify-center transition-transform duration-150 group-hover:scale-110">
                 <Award className="w-6 h-6 text-amber-600" strokeWidth={2.5} />
@@ -205,7 +202,7 @@ const UserBadges = React.memo(() => {
             </div>
           </div>
           
-          <div className="group bg-white rounded-2xl p-6 border border-purple-100 shadow-sm hover:shadow-lg transition-all duration-150 hover:-translate-y-0.5">
+          <div className="group bg-white rounded-2xl p-6 border border-teal-200 shadow-sm hover:shadow-md transition-all duration-150 hover:-translate-y-0.5">
             <div className="flex items-start justify-between mb-3">
               <div className="w-12 h-12 bg-purple-500/10 rounded-xl flex items-center justify-center transition-transform duration-150 group-hover:scale-110">
                 <Lock className="w-6 h-6 text-purple-600" strokeWidth={2.5} />
@@ -219,7 +216,7 @@ const UserBadges = React.memo(() => {
             </div>
           </div>
           
-          <div className="group bg-white rounded-2xl p-6 border border-emerald-100 shadow-sm hover:shadow-lg transition-all duration-150 hover:-translate-y-0.5">
+          <div className="group bg-white rounded-2xl p-6 border border-teal-200 shadow-sm hover:shadow-md transition-all duration-150 hover:-translate-y-0.5">
             <div className="flex items-start justify-between mb-3">
               <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center transition-transform duration-150 group-hover:scale-110">
                 <Gift className="w-6 h-6 text-emerald-600" strokeWidth={2.5} />
@@ -235,7 +232,7 @@ const UserBadges = React.memo(() => {
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-2xl p-5 sm:p-6 mb-6 shadow-sm border border-gray-100 animate-fade-in" style={{ animationDelay: '100ms' }}>
+        <div className="bg-white rounded-2xl p-5 sm:p-6 mb-6 shadow-sm border border-teal-200 animate-fade-in" style={{ animationDelay: '100ms' }}>
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             {/* Status Filter */}
             <div className="flex gap-2 w-full sm:w-auto flex-wrap">
@@ -287,8 +284,12 @@ const UserBadges = React.memo(() => {
         </div>
 
         {/* Badges Grid */}
-        {displayBadges.length === 0 ? (
-          <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-100 animate-fade-in" style={{ animationDelay: '150ms' }}>
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+            <SkeletonLoader type="card" count={8} />
+          </div>
+        ) : displayBadges.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-teal-200 animate-fade-in" style={{ animationDelay: '150ms' }}>
             <Award className="w-16 h-16 mx-auto mb-4 text-slate-300" />
             <h3 className="text-xl font-bold text-gray-900 mb-2">No Badges Found</h3>
             <p className="text-gray-600">Try adjusting your filters or start earning badges by visiting destinations!</p>
@@ -306,10 +307,10 @@ const UserBadges = React.memo(() => {
                 <div
                   key={badge.id || index}
                   className={`
-                    bg-white rounded-2xl p-6 border-2 shadow-lg relative overflow-hidden transition-all duration-150 hover:-translate-y-1
+                    bg-white rounded-2xl p-6 border shadow-lg relative overflow-hidden transition-all duration-150 hover:-translate-y-1
                     ${isEarned 
                       ? `${getRarityBorder(badge.rarity)} hover:shadow-xl` 
-                      : 'border-gray-200 opacity-75 hover:opacity-90'
+                      : 'border-slate-200 opacity-75 hover:opacity-90'
                     }
                   `}
                 >
@@ -522,7 +523,8 @@ const UserBadges = React.memo(() => {
             Showing {startIndex + 1} - {Math.min(endIndex, allDisplayBadges.length)} of {allDisplayBadges.length} badges
           </p>
         )}
-      </main>
+        </main>
+      </div>
 
       {/* QR Scanner Modal */}
       {showScanModal && (

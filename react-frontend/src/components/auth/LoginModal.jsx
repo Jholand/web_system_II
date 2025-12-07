@@ -49,8 +49,14 @@ const LoginModal = ({ isOpen, onClose, onRegisterClick }) => {
       onClose();
       toast.success('Welcome back!', { duration: 1500, icon: '👋' });
       
-      // Navigate immediately (don't wait for toast)
-      const route = result.redirect || (result.user.role === 'admin' ? '/admin/dashboard' : '/user/map');
+      // Navigate based on user role
+      let route = '/user/map';
+      if (result.user.role === 'admin') {
+        route = '/admin/dashboard';
+      } else if (result.user.role === 'owner') {
+        route = '/owner/dashboard';
+      }
+      
       navigate(route, { replace: true });
     } else {
       setLoading(false);

@@ -13,9 +13,22 @@ const preloadUserData = () => {
   const token = localStorage.getItem('auth_token');
   if (!token) return;
   
-  // Fire and forget - load all user data in parallel
+  // ⚡ Skip if cache already exists and is fresh (< 30 min old)
+  const cacheKeys = ['cached_user_badges', 'cached_user_checkins', 'cached_checkin_stats'];
+  const allCached = cacheKeys.every(key => {
+    const cached = localStorage.getItem(key);
+    if (!cached) return false;
+    try {
+      const parsed = JSON.parse(cached);
+      return (Date.now() - (parsed.timestamp || 0)) < 1800000; // 30 min
+    } catch { return false; }
+  });
+  
+  if (allCached) return; // ⚡ Skip prefetch if cache is fresh
+  
+  // Fire and forget - load all user data in parallel (with longer timeout)
   Promise.all([
-    api.request('/user/badges').then(res => {
+    api.request('/user/badges', { timeout: 15000 }).then(res => {
       if (res.success) {
         localStorage.setItem('cached_user_badges', JSON.stringify({
           earned: res.data.earned || [],
@@ -26,7 +39,7 @@ const preloadUserData = () => {
       }
     }).catch(() => {}),
     
-    api.request('/checkins').then(res => {
+    api.request('/checkins', { timeout: 15000 }).then(res => {
       if (res.success) {
         const checkinsData = res.data?.data || res.data || [];
         const recentCheckins = checkinsData.slice(0, 5).map(checkin => ({
@@ -48,7 +61,7 @@ const preloadUserData = () => {
       }
     }).catch(() => {}),
     
-    api.request('/checkins/stats').then(res => {
+    api.request('/checkins/stats', { timeout: 15000 }).then(res => {
       if (res.success) {
         localStorage.setItem('cached_checkin_stats', JSON.stringify({
           data: res.data,
@@ -57,7 +70,7 @@ const preloadUserData = () => {
       }
     }).catch(() => {}),
     
-    api.request('/user/saved-destinations').then(res => {
+    api.request('/user/saved-destinations', { timeout: 15000 }).then(res => {
       if (res.success) {
         localStorage.setItem('cached_saved_destinations', JSON.stringify({
           data: res.data || [],
@@ -87,6 +100,11 @@ const AdminRewards = lazy(() => import('./pages/admin/Rewards'))
 const Users = lazy(() => import('./pages/admin/Users'))
 const AdminMap = lazy(() => import('./pages/admin/AdminMap'))
 const AdminSettings = lazy(() => import('./pages/admin/Settings'))
+
+// Owner Pages - Lazy loaded
+const OwnerDashboard = lazy(() => import('./pages/owner/OwnerDashboard'))
+const OwnerRedemptions = lazy(() => import('./pages/owner/OwnerRedemptions'))
+const OwnerRewards = lazy(() => import('./pages/owner/OwnerRewards'))
 
 // User Pages - Lazy loaded
 const MapExplorer = lazy(() => import('./pages/user/MapExplorer'))
@@ -162,6 +180,23 @@ function AnimatedRoutes() {
         <Route path="/dashboard" element={<Navigate to="/user/dashboard" replace />} />
         <Route path="/checkin" element={<Navigate to="/user/checkin" replace />} />
         <Route path="/rewards" element={<Navigate to="/user/rewards" replace />} />
+
+        {/* Owner Routes - Protected (Owner Role Only) */}
+        <Route path="/owner/dashboard" element={
+          <ProtectedRoute requiredRole="owner">
+            <OwnerDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/redemptions" element={
+          <ProtectedRoute requiredRole="owner">
+            <OwnerRedemptions />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/rewards" element={
+          <ProtectedRoute requiredRole="owner">
+            <OwnerRewards />
+          </ProtectedRoute>
+        } />
 
         {/* Admin Routes - Protected (Admin Role Only) */}
         <Route path="/admin/dashboard" element={
@@ -267,8 +302,8 @@ function App() {
           </CategoryProvider>
         </AuthProvider>
       </BrowserRouter>
-      {/* ⚡ React Query DevTools - Only in development */}
-      <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
+      {/* ⚡ React Query DevTools - Temporarily disabled due to cache issues */}
+      {/* <ReactQueryDevtools initialIsOpen={false} position="bottom-right" /> */}
     </QueryClientProvider>
   )
 }

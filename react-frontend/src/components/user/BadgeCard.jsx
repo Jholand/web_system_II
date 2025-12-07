@@ -10,7 +10,7 @@ const BadgeCard = React.memo(({ badge }) => {
       case 'legendary': return 'from-yellow-400 via-orange-500 to-red-600';
       case 'epic': return 'from-purple-500 via-pink-500 to-purple-600';
       case 'rare': return 'from-blue-500 to-cyan-600';
-      case 'common': default: return 'from-emerald-500 to-teal-600';
+      case 'common': default: return 'from-teal-500 to-cyan-600';
     }
   };
   
@@ -19,7 +19,7 @@ const BadgeCard = React.memo(({ badge }) => {
       case 'legendary': return 'border-yellow-400';
       case 'epic': return 'border-purple-400';
       case 'rare': return 'border-blue-400';
-      case 'common': default: return 'border-emerald-300';
+      case 'common': default: return 'border-teal-300';
     }
   };
 
@@ -39,7 +39,7 @@ const BadgeCard = React.memo(({ badge }) => {
       <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${getRarityColor(badgeData?.rarity)}`} />
       
       {/* Earned star indicator */}
-      <div className="absolute top-2 right-2 p-1 bg-emerald-500/90 backdrop-blur-sm rounded-full">
+      <div className="absolute top-2 right-2 p-1 bg-teal-500/90 backdrop-blur-sm rounded-full">
         <Star className="w-3 h-3 fill-white text-white" strokeWidth={2} />
       </div>
       

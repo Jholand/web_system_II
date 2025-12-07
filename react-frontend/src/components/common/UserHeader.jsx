@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { UserCircle, LogOut, Compass } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
 
 // ⚡ ZERO-LAG HEADER - No framer-motion, pure CSS transitions
 const UserHeader = React.memo(({ user, onLogout }) => {
   const [showLogout, setShowLogout] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const dropdownRef = useRef(null);
 
   // ✅ Optimized click outside handler
@@ -25,8 +27,29 @@ const UserHeader = React.memo(({ user, onLogout }) => {
     setShowLogout(prev => !prev);
   }, []);
 
+  const handleLogoutClick = useCallback(() => {
+    setShowLogout(false);
+    setShowConfirmModal(true);
+  }, []);
+
+  const handleConfirmLogout = useCallback(() => {
+    setShowConfirmModal(false);
+    onLogout();
+  }, [onLogout]);
+
   return (
-    <header className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-md shadow-sm border-b border-emerald-100 z-40">
+    <>
+      <ConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmLogout}
+        type="logout"
+        title="Confirm Logout"
+        message="Are you sure you want to logout? You'll need to sign in again to access your account."
+        confirmText="Yes, Logout"
+        cancelText="Cancel"
+      />
+    <header className="lg:hidden fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-md shadow-sm border-b border-emerald-100 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
         {/* Logo Section - Tourism Themed */}
         <div className="flex items-center gap-2 sm:gap-3">
@@ -87,7 +110,7 @@ const UserHeader = React.memo(({ user, onLogout }) => {
               style={{ animationDuration: '150ms' }}
             >
               <button
-                onClick={onLogout}
+                onClick={handleLogoutClick}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl transition-all duration-75 active:scale-95"
               >
                 <LogOut className="w-4 h-4" strokeWidth={2} />
@@ -98,6 +121,7 @@ const UserHeader = React.memo(({ user, onLogout }) => {
         </div>
       </div>
     </header>
+    </>
   );
 }, (prevProps, nextProps) => {
   // ✅ Only re-render if user data actually changes

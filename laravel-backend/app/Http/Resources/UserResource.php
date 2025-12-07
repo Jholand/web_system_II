@@ -48,6 +48,8 @@ class UserResource extends JsonResource
         return match($this->role_id) {
             1 => 'admin',
             2 => 'user',
+            3 => 'moderator',
+            4 => 'owner',
             default => 'unknown'
         };
     }

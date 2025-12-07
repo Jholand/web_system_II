@@ -27,6 +27,7 @@ class ApiService {
     this.token = null;
     this.requestCache = new Map(); // Request deduplication cache
     this.cacheTimeout = 1000; // 1 second cache for duplicate requests
+    this.defaultTimeout = 30000; // ⚡ 30 second timeout (for slow connections)
     // Initialize token from localStorage
     this.initToken();
   }
@@ -100,6 +101,8 @@ class ApiService {
   }
 
   async request(endpoint, options = {}) {
+    console.log(`🌐 API Request START: ${endpoint}`, { method: options.method || 'GET', hasToken: !!this.token });
+    
     const url = `${this.baseURL}${endpoint}`;
     
     // Request deduplication for GET requests
@@ -107,6 +110,7 @@ class ApiService {
     if (!options.method || options.method === 'GET') {
       const cached = this.requestCache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
+        console.log(`💾 Using cached request: ${endpoint}`);
         return cached.promise;
       }
     }
@@ -119,10 +123,21 @@ class ApiService {
         ...options.headers,
       },
     };
+    
+    // ⚡ Only add timeout if connection is available
+    if (options.timeout !== false && navigator.onLine) {
+      try {
+        config.signal = AbortSignal.timeout(options.timeout || this.defaultTimeout);
+      } catch (e) {
+        // AbortSignal.timeout not supported in older browsers
+      }
+    }
 
     const requestPromise = (async () => {
       try {
+        console.log(`📡 Sending fetch to: ${url}`);
         const response = await fetch(url, config);
+        console.log(`✅ Received response from ${endpoint}:`, { status: response.status, ok: response.ok });
         
         // Handle empty responses
         if (response.status === 204) {
@@ -132,16 +147,19 @@ class ApiService {
         // Handle unauthorized - FIXED: Don't auto-logout, let AuthContext handle it
         if (response.status === 401) {
           const data = await response.json().catch(() => ({ message: 'Unauthorized' }));
+          console.error('❌ Unauthorized:', data);
           throw new Error(data.message || 'Unauthorized. Please login again.');
         }
 
         // Handle forbidden
         if (response.status === 403) {
           const data = await response.json();
+          console.error('❌ Forbidden:', data);
           throw new Error(data.message || 'Access denied.');
         }
 
         const data = await response.json();
+        console.log(`📦 Parsed data from ${endpoint}:`, data);
 
         if (!response.ok) {
           // Handle validation errors (422)

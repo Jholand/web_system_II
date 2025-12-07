@@ -13,11 +13,28 @@ use Illuminate\Support\Facades\Hash;
 class UserController extends Controller
 {
     /**
-     * Display a listing of admin users.
+     * Display a listing of users (all users or filtered by role).
      */
     public function index(Request $request): JsonResponse
     {
-        $query = User::where('role_id', 1); // Only admins (role_id = 1)
+        $query = User::query();
+
+        // Apply role filter if provided (role name: admin, user, moderator, owner)
+        if ($request->has('role') && $request->input('role') !== 'all') {
+            $roleMap = [
+                'admin' => 1,
+                'user' => 2,
+                'moderator' => 3,
+                'owner' => 4
+            ];
+            $roleName = $request->input('role');
+            if (isset($roleMap[$roleName])) {
+                $query->where('role_id', $roleMap[$roleName]);
+            }
+        } else if (!$request->has('role') || $request->input('role') === 'all') {
+            // Exclude admins from "All Users" view
+            $query->where('role_id', '!=', 1);
+        }
 
         // Apply search filter if provided
         if ($request->has('search')) {
@@ -25,20 +42,31 @@ class UserController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
                   ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('username', 'like', "%{$search}%");
             });
         }
 
-        $users = $query->orderBy('created_at', 'desc')->get();
+        // Get pagination parameters
+        $perPage = $request->input('per_page', 10);
+        $page = $request->input('page', 1);
+
+        $users = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
         return response()->json([
             'success' => true,
-            'data' => UserResource::collection($users)
+            'data' => UserResource::collection($users->items()),
+            'meta' => [
+                'total' => $users->total(),
+                'per_page' => $users->perPage(),
+                'current_page' => $users->currentPage(),
+                'last_page' => $users->lastPage(),
+            ]
         ]);
     }
 
     /**
-     * Store a newly created admin user.
+     * Store a newly created user (any role).
      */
     public function store(StoreUserRequest $request): JsonResponse
     {
@@ -47,8 +75,10 @@ class UserController extends Controller
         // Hash the password
         $validated['password'] = Hash::make($validated['password']);
         
-        // Set role_id to 1 for admin
-        $validated['role_id'] = 1;
+        // Use provided role_id or default to 2 (user)
+        if (!isset($validated['role_id'])) {
+            $validated['role_id'] = 2;
+        }
         
         // Set default status_id to 1 (active) if not provided
         if (!isset($validated['status_id'])) {
@@ -59,19 +89,17 @@ class UserController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Admin created successfully',
+            'message' => 'User created successfully',
             'data' => new UserResource($user)
         ], 201);
     }
 
     /**
-     * Display the specified admin user.
+     * Display the specified user.
      */
     public function show(string $id): JsonResponse
     {
-        $user = User::where('id', $id)
-                    ->where('role_id', 1)
-                    ->firstOrFail();
+        $user = User::findOrFail($id);
 
         return response()->json([
             'success' => true,
@@ -80,13 +108,11 @@ class UserController extends Controller
     }
 
     /**
-     * Update the specified admin user.
+     * Update the specified user.
      */
     public function update(UpdateUserRequest $request, string $id): JsonResponse
     {
-        $user = User::where('id', $id)
-                    ->where('role_id', 1)
-                    ->firstOrFail();
+        $user = User::findOrFail($id);
 
         $validated = $request->validated();
 
@@ -99,25 +125,23 @@ class UserController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Admin updated successfully',
+            'message' => 'User updated successfully',
             'data' => new UserResource($user)
         ]);
     }
 
     /**
-     * Remove the specified admin user.
+     * Remove the specified user.
      */
     public function destroy(string $id): JsonResponse
     {
-        $user = User::where('id', $id)
-                    ->where('role_id', 1)
-                    ->firstOrFail();
+        $user = User::findOrFail($id);
 
         $user->delete();
 
         return response()->json([
             'success' => true,
-            'message' => 'Admin deleted successfully'
+            'message' => 'User deleted successfully'
         ]);
     }
 

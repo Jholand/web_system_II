@@ -172,34 +172,16 @@ const QRScanner = ({ onScanSuccess, onScanError }) => {
       )}
 
       {!scanMode ? (
-        <div className="space-y-3">
-          <div className="bg-gradient-to-br from-teal-50 to-blue-50 rounded-2xl p-6 border-2 border-dashed border-teal-300">
-            <div className="flex items-center justify-center w-20 h-20 mx-auto mb-4 bg-white rounded-full shadow-lg">
-              <svg className="w-10 h-10 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-bold text-slate-900 mb-2 text-center">Scan QR Code</h3>
-            <p className="text-slate-600 text-center mb-4 text-sm">
-              Choose how you want to scan the QR code
-            </p>
-          </div>
-
+        <div className="space-y-2">
           {/* Scan Options */}
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 gap-2">
             {/* File Upload - RECOMMENDED for mobile */}
-            <label className="flex items-center gap-3 p-5 bg-gradient-to-r from-purple-50 to-pink-50 border-4 border-purple-400 rounded-xl hover:border-purple-500 hover:shadow-2xl transition-all group cursor-pointer relative">
-              <div className="absolute top-0 right-0 bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg shadow-lg animate-pulse">
-                ✨ RECOMMENDED
+            <label className="flex items-center gap-2 p-2 bg-purple-50 border border-purple-300 rounded-md hover:bg-purple-100 transition-all cursor-pointer">
+              <div className="w-8 h-8 bg-purple-500 rounded flex items-center justify-center">
+                <FileImage className="w-4 h-4 text-white" />
               </div>
-              <div className="w-14 h-14 bg-purple-500 rounded-lg flex items-center justify-center shadow-lg">
-                <FileImage className="w-7 h-7 text-white" />
-              </div>
-              <div className="text-left flex-1 pr-8">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="font-bold text-slate-900 text-lg">📸 Take Photo</p>
-                </div>
-                <p className="text-sm text-purple-700 font-semibold">Opens camera → Snap photo → Auto scan!</p>
+              <div className="text-left flex-1">
+                <p className="font-semibold text-slate-900 text-xs">📸 Take Photo</p>
               </div>
               <input
                 type="file"
@@ -213,64 +195,39 @@ const QRScanner = ({ onScanSuccess, onScanError }) => {
             {/* Camera Scan - Real-time (HTTPS only warning) */}
             <button
               onClick={() => startScanning('camera')}
-              className="flex items-center gap-3 p-4 bg-gradient-to-r from-teal-50 to-cyan-50 border-2 border-teal-300 rounded-xl hover:border-teal-500 hover:shadow-lg transition-all group relative overflow-hidden"
+              className="flex items-center gap-2 p-2 bg-teal-50 border border-teal-300 rounded-md hover:bg-teal-100 transition-all"
             >
-              <div className="absolute top-0 right-0 bg-yellow-500 text-white text-xs font-bold px-2 py-1 rounded-bl-lg">
-                HTTPS Only
-              </div>
-              <div className="w-12 h-12 bg-teal-500 rounded-lg flex items-center justify-center shadow-md">
-                <Camera className="w-6 h-6 text-white" />
+              <div className="w-8 h-8 bg-teal-500 rounded flex items-center justify-center">
+                <Camera className="w-4 h-4 text-white" />
               </div>
               <div className="text-left flex-1">
-                <p className="font-bold text-slate-900">📹 Real-Time Camera</p>
-                <p className="text-xs text-teal-700 font-medium">Live scanning (requires secure connection)</p>
+                <p className="font-semibold text-slate-900 text-xs">📹 Live scanning</p>
               </div>
             </button>
 
             {/* Manual Input */}
             <button
               onClick={() => setScanMode('manual')}
-              className="flex items-center gap-3 p-4 bg-white border-2 border-slate-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all group"
+              className="flex items-center gap-2 p-2 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-all"
             >
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-500 transition-colors">
-                <Keyboard className="w-6 h-6 text-blue-600 group-hover:text-white" />
+              <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center">
+                <Keyboard className="w-4 h-4 text-blue-600" />
               </div>
               <div className="text-left flex-1">
-                <p className="font-semibold text-slate-900">⌨️ Enter Manually</p>
-                <p className="text-xs text-slate-600">Type the QR code text directly</p>
+                <p className="font-semibold text-slate-900 text-xs">⌨️ Enter Manually</p>
               </div>
             </button>
           </div>
 
           {/* Tips Section */}
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-300 rounded-xl p-5 mt-3">
-            <p className="font-bold text-blue-900 mb-3 flex items-center gap-2 text-lg">
-              📱 Mobile Users - Use "Take Photo" Above!
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-2">
+            <p className="font-semibold text-blue-900 text-xs mb-1">
+              📱 Tips: Use "Take Photo" for mobile
             </p>
-            <p className="text-sm text-blue-800 mb-3 font-medium">
-              Camera access requires HTTPS. "Take Photo" method works perfectly on HTTP:
-            </p>
-            <ul className="text-sm text-blue-800 space-y-2">
-              <li className="flex items-start gap-2">
-                <span className="text-green-600 mt-0.5 text-lg">✓</span>
-                <span><strong>Click "Take Photo"</strong> - Opens your camera app</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-600 mt-0.5 text-lg">✓</span>
-                <span><strong>Get close</strong> - QR code fills most of frame</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-600 mt-0.5 text-lg">✓</span>
-                <span><strong>Good light</strong> - Well-lit, no shadows or glare</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-600 mt-0.5 text-lg">✓</span>
-                <span><strong>Hold steady</strong> - Clear, focused photo</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-600 mt-0.5 text-lg">✓</span>
-                <span><strong>Auto scan!</strong> - System reads QR automatically</span>
-              </li>
+            <ul className="text-xs text-blue-800 space-y-0.5">
+              <li>• Get close - QR fills frame</li>
+              <li>• Good lighting, no glare</li>
+              <li>• Hold steady, clear focus</li>
             </ul>
           </div>
         </div>

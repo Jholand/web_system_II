@@ -123,15 +123,23 @@ class AdminDashboardController extends Controller
             ? round((($rewardsThisMonth - $rewardsLastMonth) / $rewardsLastMonth) * 100, 1)
             : 0;
         
+        // Total destinations, badges, and rewards
+        $totalDestinations = DB::table('destinations')->where('status', 'active')->count();
+        $totalBadges = DB::table('badges')->count();
+        $totalRewards = DB::table('rewards')->count();
+        
         return [
             'total_users' => number_format($totalUsers),
-            'user_growth' => $userGrowth,
+            'users_growth' => $userGrowth,
             'total_checkins' => number_format($totalCheckins),
-            'checkin_growth' => $checkinGrowth,
+            'checkins_growth' => $checkinGrowth,
             'total_points' => number_format($totalPoints),
             'points_growth' => $pointsGrowth,
             'rewards_claimed' => number_format($rewardsClaimed),
             'rewards_growth' => $rewardsGrowth,
+            'total_destinations' => number_format($totalDestinations),
+            'total_badges' => number_format($totalBadges),
+            'total_rewards' => number_format($totalRewards),
         ];
     }
     

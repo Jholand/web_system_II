@@ -36,6 +36,9 @@ class DestinationController extends Controller
         $page = $request->get('page', 1);
         
         $destinations = $this->destinationService->getDestinations($filters, $perPage, $page);
+        
+        // Load rewards relationship
+        $destinations->load('rewards');
 
         return DestinationResource::collection($destinations);
     }
@@ -80,7 +83,7 @@ class DestinationController extends Controller
         Cache::forget('destinations.list');
 
         return $this->createdResponse(
-            new DestinationResource($destination->load(['category', 'images', 'operatingHours'])),
+            new DestinationResource($destination->load(['category', 'owner', 'images', 'operatingHours'])),
             'Destination created successfully'
         );
     }
@@ -134,7 +137,7 @@ class DestinationController extends Controller
         $this->destinationService->clearCache($destination->destination_id);
 
         return $this->successResponse(
-            new DestinationResource($destination->load(['category', 'images', 'operatingHours'])),
+            new DestinationResource($destination->load(['category', 'owner', 'images', 'operatingHours'])),
             'Destination updated successfully'
         );
     }

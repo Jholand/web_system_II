@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Upload, X } from 'lucide-react';
+import { Plus, Upload, X, ChevronDown, Clock } from 'lucide-react';
 import { staggerContainer, slideInFromRight } from '../../utils/animations';
 import AdminHeader from '../../components/common/AdminHeader';
+import ViewToggle from '../../components/common/ViewToggle';
 import DashboardTabs from '../../components/dashboard/DashboardTabs';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
@@ -13,7 +14,8 @@ import ToastNotification from '../../components/common/ToastNotification';
 import SearchFilter from '../../components/common/SearchFilter';
 import Pagination from '../../components/common/Pagination';
 import FetchingIndicator from '../../components/common/FetchingIndicator';
-import { BadgeSkeletonGrid } from '../../components/common/BadgeSkeleton';
+import AddButton from '../../components/common/AddButton';
+import SkeletonLoader from '../../components/common/SkeletonLoader';
 import axios from 'axios';
 
 // Auto-detect API URL for mobile access
@@ -67,6 +69,8 @@ const Badges = React.memo(() => {
   const [categories, setCategories] = useState([]);
   const [iconPreview, setIconPreview] = useState(null);
   const [iconFile, setIconFile] = useState(null);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const categoryDropdownRef = useRef(null);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -84,55 +88,16 @@ const Badges = React.memo(() => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(6); // 6 badges per page
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('badges_view_mode') || 'card';
+  });
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [totalBadges, setTotalBadges] = useState(0);
-
-  useEffect(() => {
-    const loadInitialData = () => {
-      console.log('🚀 Loading badges page...');
-      
-      // Instant load from cache
-      const cachedBadges = localStorage.getItem('cached_badges');
-      const cachedCategories = localStorage.getItem('cached_badge_categories');
-      
-      let shouldFetch = false;
-      
-      if (cachedBadges) {
-        try {
-          const parsed = JSON.parse(cachedBadges);
-          const cacheAge = Date.now() - (parsed.timestamp || 0);
-          setBadges(parsed.data || parsed);
-          console.log('⚡ Loaded from cache:', (parsed.data || parsed).length, 'badges');
-          if (cacheAge > 60000) shouldFetch = true; // Refresh if older than 1 minute
-        } catch (e) { 
-          console.error('Cache parse error:', e);
-          shouldFetch = true; 
-        }
-      } else { 
-        shouldFetch = true; 
-      }
-      
-      if (cachedCategories) {
-        try { 
-          const parsed = JSON.parse(cachedCategories);
-          setCategories(parsed.data || parsed); 
-        } catch (e) {
-          console.error('Categories cache parse error:', e);
-        }
-      }
-      
-      // Fetch fresh data in background if needed
-      if (shouldFetch) {
-        setIsFetching(true);
-        Promise.all([fetchCategories(), fetchBadges()])
-          .then(() => console.log('✅ Fresh data loaded'))
-          .catch(err => console.error('❌ Error loading data:', err))
-          .finally(() => setIsFetching(false));
-      }
-    };
-    
-    loadInitialData();
-  }, []);
+  const [badges, setBadges] = useState([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
+  const hasMounted = useRef(false);
+  const fetchIdRef = useRef(0); // Track fetch requests to prevent race conditions
 
   const fetchCategories = async () => {
     try {
@@ -156,44 +121,107 @@ const Badges = React.memo(() => {
     }
   };
 
-  const fetchBadges = async () => {
+  const fetchBadges = async (page, perPage, search, category) => {
+    const currentFetchId = ++fetchIdRef.current;
+    
     try {
-      console.log('🔄 Fetching badges - Page:', currentPage, 'Per page:', itemsPerPage);
       setIsFetching(true);
       const token = localStorage.getItem('auth_token');
       const response = await axios.get(`${API_BASE_URL}/badges`, {
         headers: { Authorization: `Bearer ${token}` },
         params: {
-          page: currentPage,
-          per_page: itemsPerPage,
-          search: searchQuery || undefined,
-          category: selectedCategory !== 'all' ? selectedCategory : undefined,
+          page: page,
+          per_page: perPage,
+          search: search || undefined,
+          category: category !== 'all' ? category : undefined,
+          _t: Date.now(),
         }
       });
+      
+      // Only update if this is still the latest fetch
+      if (currentFetchId !== fetchIdRef.current) return;
+      
       const data = response.data.data || [];
       const meta = response.data.meta || {};
-      console.log('✅ Badges fetched:', data.length, 'Total:', meta.total, 'Current page:', meta.current_page);
-      setBadges(data);
+      setBadges([...data]);
       setTotalBadges(meta.total || data.length);
-      localStorage.setItem('cached_badges', JSON.stringify({
-        data: data,
-        timestamp: Date.now()
-      }));
+      
+      // Cache first page results
+      if (page === 1 && !search && category === 'all') {
+        localStorage.setItem('cached_badges', JSON.stringify({
+          data,
+          total: meta.total || data.length,
+          timestamp: Date.now(),
+        }));
+      }
     } catch (error) {
-      console.error('❌ Error fetching badges:', error);
+      if (currentFetchId !== fetchIdRef.current) return;
+      console.error('Error fetching badges:', error);
       if (error.response?.status === 401) {
-        toast.error('Session expired. Please login again.');
+        toast.error('Session expired');
         navigate('/');
       }
     } finally {
-      setIsFetching(false);
+      if (currentFetchId === fetchIdRef.current) {
+        setIsFetching(false);
+      }
     }
   };
 
-  // Refetch when pagination or filters change
+  // Initial load
   useEffect(() => {
-    fetchBadges();
+    const loadInitial = async () => {
+      const cached = localStorage.getItem('cached_badges');
+      if (cached && currentPage === 1 && !searchQuery && selectedCategory === 'all') {
+        try {
+          const parsed = JSON.parse(cached);
+          const age = Date.now() - (parsed.timestamp || 0);
+          if (age < 300000 && parsed.data?.length) {
+            setBadges(parsed.data);
+            setTotalBadges(parsed.total || parsed.data.length);
+            setInitialLoading(false);
+            hasMounted.current = true;
+            // Fetch fresh data in background
+            fetchBadges(currentPage, itemsPerPage, searchQuery, selectedCategory);
+            fetchCategories();
+            return;
+          }
+        } catch (e) {
+          console.error('Cache parse error:', e);
+        }
+      }
+
+      await Promise.all([
+        fetchBadges(currentPage, itemsPerPage, searchQuery, selectedCategory),
+        fetchCategories()
+      ]);
+      setInitialLoading(false);
+      hasMounted.current = true;
+    };
+    
+    loadInitial();
+  }, []);
+
+  // Refetch when pagination/filters change
+  useEffect(() => {
+    if (!hasMounted.current) return;
+    
+    console.log('🔄 Pagination/filter change:', { currentPage, itemsPerPage, searchQuery, selectedCategory });
+    setIsFetching(true);
+    fetchBadges(currentPage, itemsPerPage, searchQuery, selectedCategory)
+      .finally(() => setIsFetching(false));
   }, [currentPage, itemsPerPage, searchQuery, selectedCategory]);
+
+  // Close category dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+        setCategoryDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleIconUpload = (e) => {
     const file = e.target.files[0];
@@ -239,32 +267,10 @@ const Badges = React.memo(() => {
     navigate('/');
   };
 
-  const [badges, setBadges] = useState([]);
-  const [initialLoading, setInitialLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(false);
-
-  // Filter and search logic
-  const filteredBadges = useMemo(() => {
-    console.log('🔍 Filtering badges:', { totalBadges: badges.length, searchQuery, selectedCategory });
-    const filtered = badges.filter((badge) => {
-      const matchesSearch = badge.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           badge.description?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = selectedCategory === 'all' || badge.category_id === parseInt(selectedCategory);
-      return matchesSearch && matchesCategory;
-    });
-    console.log('✅ Filtered result:', filtered.length, 'badges');
-    return filtered;
-  }, [badges, searchQuery, selectedCategory]);
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredBadges.length / itemsPerPage);
-  const paginatedBadges = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const paginated = filteredBadges.slice(startIndex, endIndex);
-    console.log('📄 Pagination:', { currentPage, itemsPerPage, startIndex, endIndex, showing: paginated.length, totalPages });
-    return paginated;
-  }, [filteredBadges, currentPage, itemsPerPage]);
+  // API already handles filtering and pagination
+  const paginatedBadges = badges; // API returns filtered and paginated data
+  const totalCount = totalBadges || badges.length; // Fallback to local length when meta missing
+  const totalPages = Math.ceil(totalCount / itemsPerPage); // Use total count for pagination
 
   // Reset to page 1 when filters change
   const handleSearchChange = useCallback((query) => {
@@ -279,12 +285,14 @@ const Badges = React.memo(() => {
 
   const handlePageChange = useCallback((page) => {
     setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setIsFetching(true);
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
 
   const handleItemsPerPageChange = useCallback((items) => {
     setItemsPerPage(items);
     setCurrentPage(1);
+    setIsFetching(true);
   }, []);
 
   const openModal = (mode, data = null) => {
@@ -506,38 +514,38 @@ const Badges = React.memo(() => {
       );
 
       return (
-        <div className="space-y-6">
-          <div className="flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 mx-auto bg-gradient-to-br from-teal-100 to-teal-200 rounded-2xl overflow-hidden">
+        <div className="space-y-3">
+          <div className="flex items-center justify-center w-12 h-12 mx-auto bg-gradient-to-br from-teal-100 to-teal-200 rounded-xl overflow-hidden">
             {displayIcon}
           </div>
 
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-            <label className="block text-xs sm:text-sm font-bold text-slate-700 mb-2">Badge Name</label>
+          <div className="bg-slate-50 rounded-lg p-2 border border-slate-200">
+            <label className="block text-xs font-bold text-slate-700 mb-1">Badge Name</label>
             <p className="text-xs font-medium text-slate-900">{data.name}</p>
           </div>
 
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-            <label className="block text-xs sm:text-sm font-bold text-slate-700 mb-2">Description</label>
+          <div className="bg-slate-50 rounded-lg p-2 border border-slate-200">
+            <label className="block text-xs font-bold text-slate-700 mb-1">Description</label>
             <p className="text-xs text-slate-900">{data.description}</p>
           </div>
 
           {/* Achievement Requirement Display */}
-          <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl p-4 border-2 border-teal-200">
-            <label className="block text-xs sm:text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-              <span>🎯</span>
+          <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-lg p-2 border border-teal-200">
+            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+              <span className="text-sm">🎯</span>
               Achievement Requirement
             </label>
             <p className="text-xs font-medium text-slate-900">{getRequirementText()}</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-              <label className="block text-xs sm:text-sm font-bold text-slate-700 mb-2">Points Reward</label>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-slate-50 rounded-lg p-2 border border-slate-200">
+              <label className="block text-xs font-bold text-slate-700 mb-1">Points Reward</label>
               <p className="text-xs font-medium text-teal-600">{data.points_reward || 0} pts</p>
             </div>
 
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-              <label className="block text-xs sm:text-sm font-bold text-slate-700 mb-2">Rarity</label>
+            <div className="bg-slate-50 rounded-lg p-2 border border-slate-200">
+              <label className="block text-xs font-bold text-slate-700 mb-1">Rarity</label>
               <p className="text-xs font-medium text-slate-900 capitalize">{data.rarity}</p>
             </div>
           </div>
@@ -548,37 +556,93 @@ const Badges = React.memo(() => {
     if (mode === 'add' || mode === 'edit') {
       return (
         <div className="space-y-4">
-          <div className="relative">
-            <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">Badge Name *</label>
-            <input 
-              type="text" 
-              name="name"
-              placeholder="Enter badge name"
-              value={formData.name}
-              onChange={handleInputChange}
-              className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs text-slate-900 bg-white border-2 border-slate-200 rounded-xl focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
-            />
+          {/* Row 1: Badge Name & Category */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="relative">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">Badge Name *</label>
+              <input 
+                type="text" 
+                name="name"
+                placeholder="Enter badge name"
+                value={formData.name}
+                onChange={handleInputChange}
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
+              />
+            </div>
+
+            <div className="relative" ref={categoryDropdownRef}>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">Category (Optional)</label>
+              <div
+                onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:border-teal-400 hover:border-teal-300 cursor-pointer transition-all flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  {formData.category_id ? (
+                    <>
+                      {(() => {
+                        const selectedCat = categories.find(c => c.id == formData.category_id);
+                        if (!selectedCat) return <span>Select a category</span>;
+                        const isImg = isImagePath(selectedCat.icon);
+                        return (
+                          <>
+                            {isImg ? (
+                              <img src={getIconUrl(selectedCat.icon)} alt="" className="w-5 h-5 rounded object-cover" />
+                            ) : (
+                              <span className="text-lg">{selectedCat.icon}</span>
+                            )}
+                            <span>{selectedCat.name}</span>
+                          </>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <span className="text-slate-500">Select a category (optional)</span>
+                  )}
+                </div>
+                <ChevronDown size={18} className={`text-slate-400 transition-transform ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
+              </div>
+              
+              {categoryDropdownOpen && (
+                <div 
+                  className="absolute z-50 w-full mt-1 bg-white border-2 border-slate-300 rounded-xl shadow-lg max-h-60 overflow-y-auto"
+                  onWheel={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                >
+                  <div
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, category_id: null }));
+                      setCategoryDropdownOpen(false);
+                    }}
+                    className="px-3 py-2 hover:bg-teal-50 cursor-pointer transition-colors text-sm text-slate-500"
+                  >
+                    None (optional)
+                  </div>
+                  {categories.map((cat) => {
+                    const isImg = isImagePath(cat.icon);
+                    return (
+                      <div
+                        key={cat.id}
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, category_id: cat.id }));
+                          setCategoryDropdownOpen(false);
+                        }}
+                        className={`px-3 py-2 hover:bg-teal-50 cursor-pointer transition-colors flex items-center gap-2 ${formData.category_id == cat.id ? 'bg-teal-100' : ''}`}
+                      >
+                        {isImg ? (
+                          <img src={getIconUrl(cat.icon)} alt={cat.name} className="w-6 h-6 rounded object-cover flex-shrink-0" />
+                        ) : (
+                          <span className="text-lg flex-shrink-0">{cat.icon}</span>
+                        )}
+                        <span className="text-sm">{cat.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="relative">
-            <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">Category (Optional)</label>
-            <select
-              name="category_id"
-              value={formData.category_id || ''}
-              onChange={handleInputChange}
-              className="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm text-slate-900 bg-white border-2 border-slate-200 rounded-xl focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-              size="1"
-              style={{ maxHeight: '200px' }}
-            >
-              <option value="">Select a category (optional)</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id} className="py-2 text-sm">
-                  {cat.icon} {cat.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
+          {/* Row 2: Description */}
           <div className="relative">
             <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">Description *</label>
             <textarea 
@@ -586,143 +650,118 @@ const Badges = React.memo(() => {
               placeholder="Enter description"
               value={formData.description}
               onChange={handleInputChange}
-              rows={3}
-              className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs text-slate-900 bg-white border-2 border-slate-200 rounded-xl focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all resize-none"
+              rows={2}
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs text-slate-900 bg-white border-2 border-slate-300 rounded-xl focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all resize-none"
             />
           </div>
 
-          {/* Icon Upload Section */}
+          {/* Row 3: Icon Upload (Compact Inline) */}
           <div className="relative">
             <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">Badge Icon *</label>
             
-            {/* Preview or Upload Area */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               {/* Icon Preview */}
               {iconPreview ? (
-                <div className="relative group">
-                  <div className="w-20 h-20 rounded-xl border-2 border-slate-200 flex items-center justify-center bg-gradient-to-br from-teal-50 to-cyan-50 overflow-hidden">
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-xl border-2 border-slate-200 flex items-center justify-center bg-gradient-to-br from-teal-50 to-cyan-50 overflow-hidden">
                     {iconFile ? (
                       <img src={iconPreview} alt="Icon preview" className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-3xl">{iconPreview}</span>
+                      <span className="text-2xl">{iconPreview}</span>
                     )}
                   </div>
                   <button
                     type="button"
                     onClick={clearIcon}
-                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
+                    className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                   >
-                    <X size={14} />
+                    <X size={12} />
                   </button>
                 </div>
               ) : (
-                <div className="w-20 h-20 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center bg-slate-50">
-                  <Upload size={24} className="text-slate-400" />
+                <div className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center bg-slate-50 flex-shrink-0">
+                  <Upload size={20} className="text-slate-400" />
                 </div>
               )}
 
-              {/* Upload Options */}
-              <div className="flex-1 space-y-2">
-                <label className="block">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleIconUpload}
-                    className="hidden"
-                  />
-                  <div className="px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white text-xs font-medium rounded-lg cursor-pointer inline-flex items-center gap-2 transition-colors">
-                    <Upload size={16} />
-                    Upload Image
-                  </div>
-                </label>
-                
-                <div className="flex items-center gap-2">
-                  <div className="h-px flex-1 bg-slate-200"></div>
-                  <span className="text-xs text-slate-500">or</span>
-                  <div className="h-px flex-1 bg-slate-200"></div>
-                </div>
-
+              {/* Upload Button */}
+              <label className="flex-shrink-0">
                 <input
-                  type="text"
-                  name="icon"
-                  placeholder="Enter emoji (e.g., 🎯)"
-                  value={formData.icon}
-                  onChange={(e) => {
-                    handleInputChange(e);
-                    setIconPreview(e.target.value);
-                    setIconFile(null);
-                  }}
-                  className="w-full px-3 py-2 text-xs text-slate-900 bg-white border-2 border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleIconUpload}
+                  className="hidden"
                 />
-              </div>
+                <div className="px-3 py-2 bg-teal-500 hover:bg-teal-600 text-white text-xs font-medium rounded-lg cursor-pointer inline-flex items-center gap-2 transition-colors">
+                  <Upload size={14} />
+                  Upload
+                </div>
+              </label>
+
+              {/* Emoji Input */}
+              <input
+                type="text"
+                name="icon"
+                placeholder="or emoji 🎯"
+                value={formData.icon}
+                onChange={(e) => {
+                  handleInputChange(e);
+                  setIconPreview(e.target.value);
+                  setIconFile(null);
+                }}
+                className="flex-1 px-3 py-2 text-xs text-slate-900 bg-white border-2 border-slate-300 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
+              />
             </div>
-            <p className="mt-2 text-xs text-slate-500">Upload an image or enter an emoji</p>
           </div>
 
-          {/* Achievement Requirements Section */}
-          <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl p-4 border-2 border-teal-200">
-            <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <span className="text-lg">🎯</span>
+          {/* Row 4: Achievement Requirements (Compact) */}
+          <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl p-3 border-2 border-teal-200">
+            <h3 className="text-xs font-bold text-slate-900 mb-3 flex items-center gap-2">
+              <span className="text-base">🎯</span>
               Achievement Requirements
             </h3>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="relative">
-                <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">Requirement Type *</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Requirement Type *</label>
                 <select
                   name="requirement_type"
                   value={formData.requirement_type}
                   onChange={handleInputChange}
-                  className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs text-slate-900 bg-white border-2 border-slate-200 rounded-xl focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
+                  className="w-full px-3 py-2 text-xs text-slate-900 bg-white border-2 border-slate-300 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
                 >
-                  <option value="visits">🏛️ Total Visits (Check-ins)</option>
-                  <option value="points">⭐ Total Points Earned</option>
-                  <option value="checkins">📍 Unique Destinations Visited</option>
-                  <option value="categories">🗂️ Different Categories Visited</option>
-                  <option value="custom">⚙️ Custom Requirement</option>
+                  <option value="visits">🏛️ Total Visits</option>
+                  <option value="points">⭐ Points</option>
+                  <option value="checkins">📍 Destinations</option>
+                  <option value="categories">🗂️ Categories</option>
+                  <option value="custom">⚙️ Custom</option>
                 </select>
               </div>
 
               <div className="relative">
-                <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">
-                  {formData.requirement_type === 'visits' && 'Number of Visits Required *'}
-                  {formData.requirement_type === 'points' && 'Points Required *'}
-                  {formData.requirement_type === 'checkins' && 'Unique Destinations *'}
-                  {formData.requirement_type === 'categories' && 'Categories to Visit *'}
-                  {formData.requirement_type === 'custom' && 'Requirement Value *'}
-                </label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Value Required *</label>
                 <input 
                   type="number" 
                   name="requirement_value"
                   placeholder={
-                    formData.requirement_type === 'visits' ? 'e.g., 50' :
-                    formData.requirement_type === 'points' ? 'e.g., 10000' :
-                    formData.requirement_type === 'checkins' ? 'e.g., 25' :
-                    formData.requirement_type === 'categories' ? 'e.g., 5' : '1'
+                    formData.requirement_type === 'visits' ? '50' :
+                    formData.requirement_type === 'points' ? '10000' :
+                    formData.requirement_type === 'checkins' ? '25' :
+                    formData.requirement_type === 'categories' ? '5' : '1'
                   }
                   value={formData.requirement_value}
                   onChange={handleInputChange}
                   min="1"
-                  className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs text-slate-900 bg-white border-2 border-slate-200 rounded-xl focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
+                  className="w-full px-3 py-2 text-xs text-slate-900 bg-white border-2 border-slate-300 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
                 />
               </div>
             </div>
-
-            {/* Requirement Type Explanation */}
-            <div className="mt-3 p-3 bg-white rounded-lg border border-teal-100">
-              <p className="text-xs text-slate-600">
-                {formData.requirement_type === 'visits' && '💡 User must complete this many check-ins at any destinations'}
-                {formData.requirement_type === 'points' && '💡 User must accumulate this many total points from all activities'}
-                {formData.requirement_type === 'checkins' && '💡 User must visit this many different/unique destinations'}
-                {formData.requirement_type === 'categories' && '💡 User must visit destinations from this many different categories'}
-                {formData.requirement_type === 'custom' && '💡 Custom requirement - define your own achievement criteria'}
-              </p>
-            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Row 5: Points Reward, Rarity, Color */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div className="relative">
-              <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">Points Reward *</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Points Reward *</label>
               <input 
                 type="number" 
                 name="points_reward"
@@ -730,17 +769,17 @@ const Badges = React.memo(() => {
                 value={formData.points_reward}
                 onChange={handleInputChange}
                 min="0"
-                className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs text-slate-900 bg-white border-2 border-slate-200 rounded-xl focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
+                className="w-full px-3 py-2 text-xs text-slate-900 bg-white border-2 border-slate-300 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
               />
             </div>
 
             <div className="relative">
-              <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">Rarity *</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Rarity *</label>
               <select
                 name="rarity"
                 value={formData.rarity}
                 onChange={handleInputChange}
-                className="w-full px-3 sm:px-4 py-2 sm:py-3 text-xs text-slate-900 bg-white border-2 border-slate-200 rounded-xl focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
+                className="w-full px-3 py-2 text-xs text-slate-900 bg-white border-2 border-slate-300 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
               >
                 <option value="common">Common</option>
                 <option value="uncommon">Uncommon</option>
@@ -749,25 +788,25 @@ const Badges = React.memo(() => {
                 <option value="legendary">Legendary</option>
               </select>
             </div>
-          </div>
 
-          <div className="relative">
-            <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-2">Badge Color</label>
-            <div className="flex items-center gap-3">
-              <input 
-                type="color" 
-                name="color"
-                value={formData.color}
-                onChange={handleInputChange}
-                className="w-12 h-12 rounded-lg border-2 border-slate-200 cursor-pointer"
-              />
-              <input 
-                type="text" 
-                value={formData.color}
-                onChange={(e) => setFormData(prev => ({ ...prev, color: e.target.value }))}
-                className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-xs text-slate-900 bg-white border-2 border-slate-200 rounded-xl focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
-                placeholder="#10B981"
-              />
+            <div className="relative col-span-2 sm:col-span-1">
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Color</label>
+              <div className="flex items-center gap-2">
+                <input 
+                  type="color" 
+                  name="color"
+                  value={formData.color}
+                  onChange={handleInputChange}
+                  className="w-10 h-10 rounded-lg border-2 border-slate-200 cursor-pointer flex-shrink-0"
+                />
+                <input 
+                  type="text" 
+                  value={formData.color}
+                  onChange={(e) => setFormData(prev => ({ ...prev, color: e.target.value }))}
+                  className="flex-1 px-3 py-2 text-xs text-slate-900 bg-white border-2 border-slate-300 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none transition-all"
+                  placeholder="#10B981"
+                />
+              </div>
             </div>
           </div>
 
@@ -819,81 +858,78 @@ const Badges = React.memo(() => {
       
       <ToastNotification />
       <FetchingIndicator isFetching={isFetching} />
-      <AdminHeader 
-        admin={getCurrentAdmin()}
-        onLogout={handleLogout}
-        sidebarCollapsed={sidebarCollapsed}
-      />
 
       <DashboardTabs onCollapseChange={setSidebarCollapsed} />
 
-      <main 
-        className={`
-          relative z-10
-          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
-          max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 pt-20 sm:pt-24 md:pt-28 pb-8 sm:pb-10 md:pb-12
-        `}
-      >
-        {badges.length === 0 ? (
-          <BadgeSkeletonGrid count={6} />
-        ) : (
-          <>
-        {/* Page Header */}
-        <motion.div 
-          className="mb-6"
+      <div className={`transition-all duration-300 pb-16 md:pb-0 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+        {/* Page Header - Full Width */}
+        <motion.header 
+          className="bg-gradient-to-r from-teal-500 to-cyan-600 shadow-lg mt-14 md:mt-16 lg:mt-0 md:sticky md:top-16 lg:sticky lg:top-0 z-30"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.1 }}
         >
-          <div className="flex items-center justify-between mb-6">
-            <motion.div 
-              className="flex items-center gap-3"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.1 }}
-            >
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-2xl font-semibold text-slate-900">Badges & Achievements</h2>
-                <p className="text-sm text-slate-600 mt-1">Create and manage user achievement badges</p>
-              </div>
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.1 }}
-            >
-              <Button 
-                variant="primary" 
-                onClick={handleAddBadge} 
-                icon={<Plus className="w-5 h-5" />}
-                className="bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 shadow-lg hover:shadow-xl transition-all duration-200"
+          <div className="px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between">
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.1 }}
               >
-                Add Badge
-              </Button>
-            </motion.div>
+                <h1 className="text-3xl font-bold text-white mb-1">Badges & Achievements</h1>
+                <p className="text-sm text-teal-50 mt-1">Create and manage user achievement badges</p>
+              </motion.div>
+              <motion.div
+                className="flex items-center gap-4"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.1 }}
+              >
+                <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
+                  <Clock className="w-5 h-5 text-white" />
+                  <span className="text-sm font-medium text-white">{new Date().toLocaleDateString()}</span>
+                </div>
+                <AddButton
+                  onClick={handleAddBadge}
+                  icon={Plus}
+                >
+                  Add Badge
+                </AddButton>
+              </motion.div>
+            </div>
           </div>
-        </motion.div>
+        </motion.header>
 
+        {/* Content with Padding */}
+        <main className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto mt-6">
         {/* Search and Filter */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.1 }}
         >
-          <SearchFilter
-            searchQuery={searchQuery}
-            onSearchChange={handleSearchChange}
-            selectedCategory={selectedCategory}
-            onCategoryChange={handleCategoryChange}
-            categories={categories.map(cat => ({ value: cat.id, label: `${cat.icon} ${cat.name}` }))}
-            placeholder="Search badges..."
-            showFilter={true}
-          />
+          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start justify-between mb-6">
+            <div className="flex-1 lg:max-w-2xl">
+              <SearchFilter
+                searchQuery={searchQuery}
+                onSearchChange={handleSearchChange}
+                selectedCategory={selectedCategory}
+                onCategoryChange={handleCategoryChange}
+                categories={categories.map(cat => ({ id: cat.id, value: cat.id, name: cat.name, icon: cat.icon, label: cat.name }))}
+                placeholder="Search badges..."
+                showFilter={true}
+              />
+            </div>
+            <div className="flex-shrink-0">
+              <ViewToggle 
+                view={viewMode} 
+                onViewChange={(mode) => {
+                  setViewMode(mode);
+                  localStorage.setItem('badges_view_mode', mode);
+                }} 
+              />
+            </div>
+          </div>
         </motion.div>
 
         {/* Results Count */}
@@ -904,111 +940,242 @@ const Badges = React.memo(() => {
           transition={{ duration: 0.1 }}
         >
           <p className="text-sm text-slate-600">
-            Found <span className="font-bold text-teal-600">{filteredBadges.length}</span> badge{filteredBadges.length !== 1 ? 's' : ''}
+            Found <span className="font-bold text-teal-600">{totalCount}</span> badge{totalCount !== 1 ? 's' : ''}
             {searchQuery && <span> matching "<span className="font-semibold text-slate-900">{searchQuery}</span>"</span>}
           </p>
         </motion.div>
 
-        {/* Cards Grid */}
-        {paginatedBadges.length > 0 ? (
+        {/* Cards Grid / Table */}
+        {initialLoading ? (
+          viewMode === 'card' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              <SkeletonLoader type="card" count={6} />
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-md border-2 border-teal-200 overflow-hidden">
+              <table className="w-full">
+                <tbody>
+                  <SkeletonLoader type="table-row" count={6} />
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : paginatedBadges.length > 0 ? (
           <>
-            <motion.div
-              variants={staggerContainer}
-              initial="hidden"
-              animate="visible"
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 pb-8"
-            >
-              {paginatedBadges.map((badge) => (
-                <motion.div key={badge.id} variants={slideInFromRight} className="relative z-0 group">
-                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-xl hover:border-teal-300 transition-all duration-300 overflow-visible h-[280px] flex flex-col relative z-10 hover:z-20">{/* Header with Icon */}
-                    <div className="bg-gradient-to-br from-teal-50 to-cyan-50 p-5 relative overflow-visible">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className={`w-14 h-14 ${badge.color || 'bg-gradient-to-br from-teal-400 to-cyan-500'} rounded-xl shadow-md flex items-center justify-center text-3xl relative overflow-hidden flex-shrink-0`}>
-                            {isImagePath(badge.icon) ? (
-                              <img 
-                                src={getIconUrl(badge.icon)} 
-                                alt={badge.name}
-                                className="w-full h-full object-cover rounded-xl"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <span>{badge.icon}</span>
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h3 className="text-lg font-bold text-slate-900 truncate" title={badge.name}>{badge.name}</h3>
-                            <span className="text-xs text-teal-600 font-medium">
-                              {badge.rarity ? `${badge.rarity.charAt(0).toUpperCase() + badge.rarity.slice(1)} Badge` : 'Badge'}
-                            </span>
-                          </div>
-                        </div>
-                        {/* Hover Actions */}
-                        <div className="flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-shrink-0 relative z-30">
-                          <button
-                            onClick={() => handleView(badge)}
-                            className="p-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md hover:shadow-lg hover:scale-105"
-                            title="View"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleEdit(badge)}
-                            className="p-2 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-lg hover:from-teal-600 hover:to-cyan-700 transition-all shadow-md hover:shadow-lg hover:scale-105"
-                            title="Edit"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleDelete(badge)}
-                            className="p-2 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg hover:from-red-600 hover:to-pink-700 transition-all shadow-md hover:shadow-lg hover:scale-105"
-                            title="Delete"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    {/* Content */}
-                    <div className="p-5 flex-1 flex flex-col">
-                      <p className="text-sm text-slate-600 mb-3 line-clamp-2 flex-1">{badge.description}</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        {badge.category && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">{badge.category.icon}</span>
-                            <div>
-                              <p className="text-xs text-slate-500">Category</p>
-                              <p className="text-sm font-semibold text-slate-900">{badge.category.name}</p>
+            {viewMode === 'card' ? (
+              <motion.div
+                key={`badges-page-${currentPage}`}
+                variants={staggerContainer}
+                initial="hidden"
+                animate="visible"
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 pb-8"
+              >
+                {paginatedBadges.map((badge) => (
+                  <motion.div key={badge.id} variants={slideInFromRight} className="relative z-0 group">
+                    <div className="bg-gradient-to-br from-white via-teal-50/30 to-cyan-50/30 border-2 border-teal-200 rounded-xl hover:shadow-2xl hover:border-teal-400 hover:from-teal-50 hover:via-cyan-50 hover:to-blue-50 transition-all duration-300 shadow-[0_8px_20px_rgba(20,184,166,0.15)] overflow-visible h-[280px] flex flex-col relative z-10 hover:z-20 hover:scale-[1.02]">{/* Header with Icon */}
+                      <div className="bg-gradient-to-br from-teal-50 to-cyan-50 p-5 relative overflow-visible">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className={`w-14 h-14 ${badge.color || 'bg-gradient-to-br from-teal-400 to-cyan-500'} rounded-xl shadow-md flex items-center justify-center text-3xl relative overflow-hidden flex-shrink-0`}>
+                              {isImagePath(badge.icon) ? (
+                                <img 
+                                  src={getIconUrl(badge.icon)} 
+                                  alt={badge.name}
+                                  className="w-full h-full object-cover rounded-xl"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <span>{badge.icon}</span>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-lg font-bold text-slate-900 truncate" title={badge.name}>{badge.name}</h3>
+                              <span className="text-xs text-teal-600 font-medium">
+                                {badge.rarity ? `${badge.rarity.charAt(0).toUpperCase() + badge.rarity.slice(1)} Badge` : 'Badge'}
+                              </span>
                             </div>
                           </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">⭐</span>
-                          <div>
-                            <p className="text-xs text-slate-500">Points Reward</p>
-                            <p className="text-sm font-semibold text-teal-600">{badge.points_reward || 0}</p>
+                          {/* Hover Actions */}
+                          <div className="flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex-shrink-0 relative z-30">
+                            <button
+                              onClick={() => handleView(badge)}
+                              className="p-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all shadow-md hover:shadow-lg hover:scale-105"
+                              title="View"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleEdit(badge)}
+                              className="p-2 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-lg hover:from-teal-600 hover:to-cyan-700 transition-all shadow-md hover:shadow-lg hover:scale-105"
+                              title="Edit"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDelete(badge)}
+                              className="p-2 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg hover:from-red-600 hover:to-pink-700 transition-all shadow-md hover:shadow-lg hover:scale-105"
+                              title="Delete"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Content */}
+                      <div className="p-5 flex-1 flex flex-col">
+                        <p className="text-sm text-slate-600 mb-3 line-clamp-2 flex-1">{badge.description}</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {badge.category && (
+                            <div className="flex items-center gap-2">
+                              {isImagePath(badge.category.icon) ? (
+                                <img 
+                                  src={getIconUrl(badge.category.icon)} 
+                                  alt={badge.category.name}
+                                  className="w-8 h-8 rounded-lg object-cover border border-slate-200"
+                                />
+                              ) : (
+                                <span className="text-lg">{badge.category.icon}</span>
+                              )}
+                              <div>
+                                <p className="text-xs text-slate-500">Category</p>
+                                <p className="text-sm font-semibold text-slate-900">{badge.category.name}</p>
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">⭐</span>
+                            <div>
+                              <p className="text-xs text-slate-500">Points Reward</p>
+                              <p className="text-sm font-semibold text-teal-600">{badge.points_reward || 0}</p>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            ) : (
+              <div className="bg-gradient-to-br from-white via-teal-50/30 to-cyan-50/30 rounded-xl shadow-[0_8px_20px_rgba(20,184,166,0.15)] border-2 border-teal-200 overflow-hidden pb-8">
+                <table className="w-full">
+                  <thead className="bg-gradient-to-r from-teal-100 to-cyan-100 border-b-2 border-teal-300">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Badge</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Description</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Category</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Rarity</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Points</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-teal-200">
+                    {paginatedBadges.map((badge) => (
+                      <tr key={badge.id} className="hover:bg-gradient-to-r hover:from-teal-50 hover:to-cyan-50 transition-colors duration-150">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-12 h-12 ${badge.color || 'bg-gradient-to-br from-teal-400 to-cyan-500'} rounded-lg shadow-sm flex items-center justify-center text-2xl flex-shrink-0`}>
+                              {isImagePath(badge.icon) ? (
+                                <img 
+                                  src={getIconUrl(badge.icon)} 
+                                  alt={badge.name}
+                                  className="w-full h-full object-cover rounded-lg"
+                                />
+                              ) : (
+                                <span>{badge.icon}</span>
+                              )}
+                            </div>
+                            <span className="font-semibold text-slate-900">{badge.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-600 max-w-md">
+                          {badge.description}
+                        </td>
+                        <td className="px-6 py-4">
+                          {badge.category ? (
+                            <div className="flex items-center gap-2">
+                              {isImagePath(badge.category.icon) ? (
+                                <img 
+                                  src={getIconUrl(badge.category.icon)} 
+                                  alt={badge.category.name}
+                                  className="w-8 h-8 rounded-lg object-cover border border-slate-200"
+                                />
+                              ) : (
+                                <span className="text-lg">{badge.category.icon}</span>
+                              )}
+                              <span className="text-sm text-slate-900">{badge.category.name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-slate-400">N/A</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                            badge.rarity === 'legendary' ? 'bg-purple-100 text-purple-700' :
+                            badge.rarity === 'epic' ? 'bg-pink-100 text-pink-700' :
+                            badge.rarity === 'rare' ? 'bg-blue-100 text-blue-700' :
+                            badge.rarity === 'uncommon' ? 'bg-green-100 text-green-700' :
+                            'bg-slate-100 text-slate-700'
+                          }`}>
+                            {badge.rarity ? badge.rarity.charAt(0).toUpperCase() + badge.rarity.slice(1) : 'Common'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-sm font-semibold text-teal-600">
+                            {badge.points_reward || 0}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleView(badge)}
+                              className="p-2 bg-gradient-to-br from-teal-400 to-cyan-500 text-white rounded-lg hover:from-teal-500 hover:to-cyan-600 transition-all shadow-md"
+                              title="View"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleEdit(badge)}
+                              className="p-2 bg-gradient-to-br from-blue-400 to-indigo-500 text-white rounded-lg hover:from-blue-500 hover:to-indigo-600 transition-all shadow-md"
+                              title="Edit"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDelete(badge)}
+                              className="p-2 bg-gradient-to-br from-red-400 to-pink-500 text-white rounded-lg hover:from-red-500 hover:to-pink-600 transition-all shadow-md"
+                              title="Delete"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {/* Pagination */}
-            {filteredBadges.length > itemsPerPage && (
+            {totalCount > itemsPerPage && (
               <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
-                totalItems={filteredBadges.length}
+                totalItems={totalCount}
                 itemsPerPage={itemsPerPage}
                 onPageChange={handlePageChange}
                 onItemsPerPageChange={handleItemsPerPageChange}
@@ -1016,10 +1183,10 @@ const Badges = React.memo(() => {
             )}
           </>
         ) : (
-          <div className="bg-white rounded-xl border-2 border-dashed border-slate-300 p-12 text-center">
+          <div className="bg-gradient-to-br from-white via-slate-50 to-gray-50 rounded-xl border-2 border-dashed border-teal-300 p-12 text-center shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
             <div className="flex flex-col items-center">
-              <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mb-4">
-                <svg className="w-8 h-8 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-full flex items-center justify-center mb-4 shadow-md">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                 </svg>
               </div>
@@ -1031,9 +1198,8 @@ const Badges = React.memo(() => {
             </div>
           </div>
         )}
-        </>
-        )}
-      </main>
+        </main>
+      </div>
 
       <Modal 
         key={modalState.data?.id || modalState.mode}
@@ -1082,7 +1248,8 @@ const Badges = React.memo(() => {
             </>
           )
         } 
-        size="md"
+        size="lg"
+        scrollable={modalState.mode === 'view'}
       >
         {renderModalContent()}
       </Modal>

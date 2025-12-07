@@ -26,9 +26,12 @@ class StoreUserRequest extends FormRequest
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', Password::min(8)->mixedCase()->numbers()],
+            'password' => ['required', 'string', 'min:8'],
             'username' => ['nullable', 'string', 'max:50', 'unique:users,username'],
             'phone' => ['nullable', 'string', 'max:20'],
+            'date_of_birth' => ['nullable', 'date'],
+            'gender' => ['nullable', 'in:male,female,other,prefer_not_to_say'],
+            'role_id' => ['nullable', 'integer', 'in:1,2,3,4'], // 1=admin, 2=user, 3=moderator, 4=owner
             'status_id' => ['nullable', 'integer', 'in:1,2,3,4'], // 1=active, 2=inactive, 3=suspended, 4=banned
         ];
     }

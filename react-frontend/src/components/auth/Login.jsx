@@ -34,8 +34,14 @@ const Login = ({ isAdmin = false }) => {
         // ULTRA-FAST: Update UI and navigate simultaneously
         toast.success('Welcome back!', { id: loadingToast, duration: 1500 });
         
-        // ✅ REDIRECT TO DASHBOARD (not map) - Better UX
-        const targetRoute = result.user.role === 'admin' || isAdmin ? '/admin/dashboard' : '/user/dashboard';
+        // ✅ REDIRECT based on user role
+        let targetRoute = '/user/dashboard';
+        if (result.user.role === 'admin' || isAdmin) {
+          targetRoute = '/admin/dashboard';
+        } else if (result.user.role === 'owner') {
+          targetRoute = '/owner/dashboard';
+        }
+        
         navigate(targetRoute, { replace: true });
         // Note: Don't set loading false here - we're navigating away
       } else {

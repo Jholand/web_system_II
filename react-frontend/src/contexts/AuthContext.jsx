@@ -9,6 +9,8 @@ const sanitizeUserData = (user) => {
   if (!user) return null;
   return {
     ...user,
+    id: user.id,
+    role_id: user.role_id,
     name: String(user.name || '').trim(),
     email: String(user.email || '').trim().toLowerCase(),
     role: String(user.role || 'user'),

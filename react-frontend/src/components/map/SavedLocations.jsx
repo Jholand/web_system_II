@@ -22,8 +22,8 @@ const SavedLocations = ({ locations, calculateDistance, userLocation, onLocation
   };
 
   return (
-    <div className="bg-white rounded-2xl border max-h-[calc(100vh-200px)] flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 flex-shrink-0">
+    <div className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm max-h-[calc(100vh-200px)] flex flex-col">
+      <div className="flex items-center gap-2 px-4 py-3 border-b-2 border-slate-200 flex-shrink-0">
         <svg className="w-5 h-5 text-pink-600" fill="currentColor" viewBox="0 0 24 24">
           <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
         </svg>
@@ -39,7 +39,7 @@ const SavedLocations = ({ locations, calculateDistance, userLocation, onLocation
             {locations.map((location) => (
               <div
                 key={location.id}
-                className="relative flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-pink-50 hover:border-pink-200 border border-transparent cursor-pointer transition-all group"
+                className="relative flex items-start gap-3 p-3 bg-white rounded-xl hover:bg-teal-50 hover:border-teal-300 border-2 border-slate-200 cursor-pointer transition-all group shadow-sm hover:shadow-md"
               >
                 {/* Heart button for unsaving */}
                 {onToggleSave && (

@@ -13,20 +13,15 @@ const MilestoneCard = React.memo(({ milestone }) => {
   );
 
   return (
-    <div className="group bg-white rounded-2xl p-6 border border-purple-200 hover:border-purple-300 shadow-sm hover:shadow-lg transition-all duration-150">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-md shadow-purple-500/30">
-          <Target className="w-4 h-4 text-white" strokeWidth={2.5} />
-        </div>
-        <h3 className="text-lg font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">Next Milestone</h3>
-      </div>
+    <div className="group bg-white rounded-2xl p-6 border border-teal-200 shadow-sm hover:shadow-md transition-all duration-200">
+      <h3 className="text-lg font-bold text-gray-900 mb-5">Next Milestone</h3>
 
       <div className="text-center">
         <div className="relative inline-block mb-3">
           <div className="w-20 h-20 bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-500/30 group-hover:shadow-purple-500/50 transition-shadow duration-150">
             <span className="text-4xl drop-shadow-lg">{milestone.icon}</span>
           </div>
-          <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center shadow-md ring-2 ring-white">
+          <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-full flex items-center justify-center shadow-md ring-2 ring-white">
             <span className="text-xs font-bold text-white">{milestone.current}</span>
           </div>
         </div>

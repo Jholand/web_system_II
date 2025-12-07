@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Bell, Moon, MapPin, Users } from 'lucide-react';
 import axios from 'axios';
 import AdminSidebar from '../../components/layout/AdminSidebar';
-import { DestinationSkeletonGrid } from '../../components/common/DestinationSkeleton';
+import SkeletonLoader from '../../components/common/SkeletonLoader';
 import toast from 'react-hot-toast';
 
 // Auto-detect API URL
@@ -23,7 +23,7 @@ const ModernDestinations = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [destinations, setDestinations] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
 
   // Fetch destinations with instant cache loading
@@ -34,14 +34,24 @@ const ModernDestinations = () => {
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
-          setDestinations(parsed.data || parsed);
-          setLoading(false);
+          const cacheAge = Date.now() - (parsed.timestamp || 0);
+          const data = parsed.data || parsed;
+          
+          if (data && data.length > 0) {
+            setDestinations(data);
+            console.log('⚡ Loaded destinations from cache:', data.length);
+          }
+          
+          // Skip fetch if cache is fresh (< 5 min)
+          if (cacheAge < 300000 && data && data.length > 0) {
+            return;
+          }
         } catch (e) {
           console.error('Cache parse error:', e);
         }
       }
 
-      // Fetch fresh data in background
+      // Fetch fresh data
       setIsFetching(true);
       try {
         const token = localStorage.getItem('auth_token');
@@ -56,14 +66,13 @@ const ModernDestinations = () => {
           data,
           timestamp: Date.now()
         }));
-        setLoading(false);
+        console.log('✅ Fresh destinations loaded:', data.length);
       } catch (error) {
         console.error('Error fetching destinations:', error);
         if (error.response?.status === 401) {
           toast.error('Session expired');
           navigate('/');
         }
-        setLoading(false);
       } finally {
         setIsFetching(false);
       }
@@ -158,7 +167,7 @@ const ModernDestinations = () => {
 
           {/* Destinations Grid */}
           {loading ? (
-            <DestinationSkeletonGrid count={6} />
+            <SkeletonLoader type="destination-card" count={6} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <AnimatePresence mode="wait">

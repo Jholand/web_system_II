@@ -44,6 +44,7 @@ class StoreDestinationRequest extends FormRequest
             'status' => 'required|in:active,inactive,pending',
             'qr_code' => 'nullable|string|max:255',
             'qr_code_image_url' => 'nullable|string|max:500',
+            'owner_id' => 'nullable|exists:users,id',
         ];
     }
 

@@ -51,6 +51,17 @@ class DestinationResource extends JsonResource
             ],
             'qr_code' => $this->qr_code,
             'qr_code_image_url' => $this->qr_code_image_url,
+            'owner_id' => $this->owner_id,
+            'owner' => $this->whenLoaded('owner', function () {
+                if (!$this->owner) {
+                    return null;
+                }
+                return [
+                    'id' => $this->owner->id,
+                    'name' => $this->owner->first_name . ' ' . $this->owner->last_name,
+                    'email' => $this->owner->email,
+                ];
+            }),
             'amenities' => $this->amenities ?? [],
             'images' => $this->whenLoaded('images', function () {
                 return $this->images->map(function ($image) {
@@ -71,6 +82,18 @@ class DestinationResource extends JsonResource
                         'opens' => $hour->opens_at ? substr($hour->opens_at, 0, 5) : '09:00',
                         'closes' => $hour->closes_at ? substr($hour->closes_at, 0, 5) : '18:00',
                         'is_closed' => (bool) $hour->is_closed,
+                    ];
+                });
+            }, []),
+            'rewards' => $this->whenLoaded('rewards', function () {
+                return $this->rewards->map(function ($reward) {
+                    return [
+                        'id' => $reward->id,
+                        'title' => $reward->title,
+                        'description' => $reward->description,
+                        'points_required' => $reward->points_required,
+                        'stock_quantity' => $reward->stock_quantity,
+                        'is_active' => $reward->is_active,
                     ];
                 });
             }, []),

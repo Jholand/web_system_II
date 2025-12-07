@@ -27,6 +27,12 @@ class UserRoleSeeder extends Seeder
                 'role_name' => 'Moderator',
                 'description' => 'Content moderation access',
                 'created_at' => now()
+            ],
+            [
+                'role_code' => 'owner',
+                'role_name' => 'Owner',
+                'description' => 'Destination owner account',
+                'created_at' => now()
             ]
         ]);
     }

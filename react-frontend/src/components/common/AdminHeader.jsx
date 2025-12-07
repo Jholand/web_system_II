@@ -2,9 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Bell, Moon } from 'lucide-react';
 import Button from './Button';
+import ConfirmModal from './ConfirmModal';
 
 const AdminHeader = ({ admin, onLogout, searchQuery, onSearchChange, sidebarCollapsed }) => {
   const [showLogout, setShowLogout] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -18,7 +20,28 @@ const AdminHeader = ({ admin, onLogout, searchQuery, onSearchChange, sidebarColl
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleLogoutClick = () => {
+    setShowLogout(false);
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmLogout = () => {
+    setShowConfirmModal(false);
+    onLogout();
+  };
+
   return (
+    <>
+      <ConfirmModal
+        isOpen={showConfirmModal}
+        onClose={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmLogout}
+        type="logout"
+        title="Confirm Logout"
+        message="Are you sure you want to logout? You'll need to sign in again to access your account."
+        confirmText="Yes, Logout"
+        cancelText="Cancel"
+      />
     <header className={`fixed top-0 right-0 bg-white border-b border-gray-200 z-40 transition-all duration-150 ${sidebarCollapsed ? 'left-20' : 'left-64'}`}>
       <div className="px-6 py-3.5 flex items-center justify-between">
         {/* Left: Page Title */}
@@ -57,7 +80,9 @@ const AdminHeader = ({ admin, onLogout, searchQuery, onSearchChange, sidebarColl
               onClick={() => setShowLogout(!showLogout)}
               className="w-10 h-10 bg-white border-2 border-gray-200 hover:border-teal-500 rounded-lg flex items-center justify-center transition-all"
             >
-              <span className="text-gray-700 font-semibold text-sm">U</span>
+              <span className="text-gray-700 font-semibold text-sm">
+                {admin?.name ? admin.name.charAt(0).toUpperCase() : 'U'}
+              </span>
             </button>
             
             <AnimatePresence>
@@ -70,7 +95,7 @@ const AdminHeader = ({ admin, onLogout, searchQuery, onSearchChange, sidebarColl
                   className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden min-w-[140px] z-50"
                 >
                   <button
-                    onClick={onLogout}
+                    onClick={handleLogoutClick}
                     className="w-full px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50 transition-colors"
                   >
                     Logout
@@ -82,6 +107,7 @@ const AdminHeader = ({ admin, onLogout, searchQuery, onSearchChange, sidebarColl
         </div>
       </div>
     </header>
+    </>
   );
 };
 

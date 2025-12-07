@@ -7,6 +7,43 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Warm SaaS Theme - Soft Yellow/Beige Palette
+        warm: {
+          50: '#fefdfb',
+          100: '#fef9f3',
+          150: '#fef6ec',
+          200: '#fef0e0',
+          300: '#fde7cf',
+          400: '#fdd9b0',
+          500: '#fcc980',
+          600: '#f5b34f',
+          700: '#e89b2e',
+          800: '#c97e1f',
+          900: '#a36418',
+        },
+        cream: {
+          50: '#fefcf8',
+          100: '#fef9f1',
+          200: '#fcf4e8',
+          300: '#faefd9',
+          400: '#f7e8c5',
+          500: '#f3dda8',
+          600: '#e8c97a',
+          700: '#d4af52',
+          800: '#b18f3a',
+          900: '#8d7129',
+        },
+        gold: {
+          400: '#fbbf24',
+          500: '#f59e0b',
+          600: '#d97706',
+        },
+        charcoal: {
+          600: '#4a5568',
+          700: '#2d3748',
+          800: '#1a202c',
+          900: '#171923',
+        },
         // Tourism Theme - Modern Palette
         tourism: {
           teal: {

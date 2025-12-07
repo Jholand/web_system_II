@@ -36,7 +36,7 @@ class UpdateUserRequest extends FormRequest
                 'max:255', 
                 Rule::unique('users', 'email')->ignore($userId)
             ],
-            'password' => ['nullable', 'string', Password::min(8)->mixedCase()->numbers()],
+            'password' => ['nullable', 'string', 'min:8'],
             'username' => [
                 'nullable', 
                 'string', 
@@ -44,6 +44,9 @@ class UpdateUserRequest extends FormRequest
                 Rule::unique('users', 'username')->ignore($userId)
             ],
             'phone' => ['nullable', 'string', 'max:20'],
+            'date_of_birth' => ['nullable', 'date'],
+            'gender' => ['nullable', 'in:male,female,other,prefer_not_to_say'],
+            'role_id' => ['nullable', 'integer', 'in:1,2,3,4'], // 1=admin, 2=user, 3=moderator, 4=owner
             'status_id' => ['nullable', 'integer', 'in:1,2,3,4'], // 1=active, 2=inactive, 3=suspended, 4=banned
         ];
     }

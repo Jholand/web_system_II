@@ -197,12 +197,13 @@ const MapView = ({
   };
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full" style={{ zIndex: 0 }}>
       <MapContainer
         center={mapCenter}
         zoom={isNavigating ? 14 : 13}
         className="w-full h-full rounded-2xl shadow-lg"
         zoomControl={true}
+        style={{ zIndex: 0 }}
       >
         {/* Google Satellite imagery */}
         <TileLayer

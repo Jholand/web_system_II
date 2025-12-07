@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+  import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { Gift, Star } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCategories } from '../../contexts/CategoryContext';
 import { staggerContainer, slideInFromRight, slideInFromBottom, scaleIn } from '../../utils/animations';
@@ -10,6 +11,7 @@ import UserDashboardTabs from '../../components/user/UserDashboardTabs';
 import Button from '../../components/common/Button';
 import ToastNotification from '../../components/common/ToastNotification';
 import FetchingIndicator from '../../components/common/FetchingIndicator';
+import SkeletonLoader from '../../components/common/SkeletonLoader';
 import Modal from '../../components/common/Modal';
 import QRScanner from '../../components/qr/QRScanner';
 import CheckInReview from '../../components/user/CheckInReview';
@@ -19,7 +21,7 @@ import rewardService from '../../services/rewardService';
 
 const Rewards = React.memo(() => {
   const navigate = useNavigate();
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout, refreshUser } = useAuth();          
   const { categories, loading: categoriesLoading } = useCategories(); // ⚡ Use context - NO repeated API calls
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
@@ -46,47 +48,17 @@ const Rewards = React.memo(() => {
   const [userPoints, setUserPoints] = useState(0);
   const [rewards, setRewards] = useState([]);
   const [redeemedRewards, setRedeemedRewards] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // ⚡ START FALSE - instant!
   const [isFetching, setIsFetching] = useState(false); // Background fetch indicator
-  const [userLocation, setUserLocation] = useState(null);
-  const [nearbyRewards, setNearbyRewards] = useState([]);
-  const [locationError, setLocationError] = useState(null);
   const [selectedDestination, setSelectedDestination] = useState(null);
+  const [showRedeemModal, setShowRedeemModal] = useState(false);
+  const [showDestinationModal, setShowDestinationModal] = useState(false);
+  const [pendingReward, setPendingReward] = useState(null);
+  const [pendingRedemption, setPendingRedemption] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6; // 6 rewards per page
 
-  // ⚡ FIX: Define all functions BEFORE useEffect calls
-  
-  const getUserLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by your browser');
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude
-        });
-        setLocationError(null);
-      },
-      (error) => {
-        setLocationError('Unable to get your location. Please enable location services.');
-        console.error('Geolocation error:', error);
-      },
-      {
-        enableHighAccuracy: false, // Changed to false for faster response
-        timeout: 10000, // Increased timeout to 10 seconds
-        maximumAge: 300000 // Cache position for 5 minutes
-      }
-    );
-  }, []);
-
-  // Auto-enable location on mount
-  useEffect(() => {
-    getUserLocation();
-  }, [getUserLocation]);
+  // ⚡ Location services removed - not needed for redemption
 
   const fetchUserRedemptions = useCallback(async () => {
     try {
@@ -97,25 +69,7 @@ const Rewards = React.memo(() => {
     }
   }, []);
 
-  const checkNearbyRewards = useCallback(async () => {
-    if (!userLocation) {
-      setNearbyRewards([]);
-      return;
-    }
 
-    try {
-      const response = await rewardService.getAvailableAtLocation(
-        userLocation.latitude,
-        userLocation.longitude
-      );
-      const nearbyData = response.data?.rewards || [];
-      console.log('Nearby rewards response:', nearbyData);
-      setNearbyRewards(nearbyData);
-    } catch (error) {
-      console.error('Error checking nearby rewards:', error);
-      setNearbyRewards([]); // On error, assume no nearby rewards
-    }
-  }, [userLocation]);
 
   // ⚡ INSTANT LOAD: Fetch rewards from cache, then background update
   const fetchRewards = useCallback(async () => {
@@ -136,24 +90,44 @@ const Rewards = React.memo(() => {
 
   useEffect(() => {
     const loadRewards = () => {
-      // INSTANT: Load from cache first
+      // ⚡ F1 SPEED: INSTANT cache load - 0ms loading!
       const cached = localStorage.getItem('cached_user_rewards');
       let shouldFetch = false;
+      let hasCache = false;
       
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
           const cacheAge = Date.now() - (parsed.timestamp || 0);
-          setRewards(parsed.data || parsed);
-          if (cacheAge > 60000) shouldFetch = true; // Refresh if older than 1 min
-        } catch (e) { shouldFetch = true; }
-      } else { shouldFetch = true; }
+          const TTL = 60 * 60 * 1000; // ⚡ 1 HOUR CACHE - EXTREME SPEED!
+          const rewardData = parsed.data || parsed;
+          
+          if (cacheAge < TTL && rewardData && rewardData.length > 0) {
+            // ⚡ INSTANT: Load from cache (0ms!)
+            setRewards(rewardData);
+            hasCache = true;
+            setLoading(false); // ⚡ NO LOADING - INSTANT!
+            
+            // Background refresh only if older than 30 min
+            if (cacheAge > 30 * 60 * 1000) shouldFetch = true;
+          } else {
+            shouldFetch = true;
+          }
+        } catch (e) { 
+          shouldFetch = true; 
+        }
+      } else { 
+        shouldFetch = true; 
+      }
       
       // Background fetch if needed
       if (shouldFetch) {
-        setIsFetching(true);
+        setIsFetching(hasCache); // Only show fetching if we have cache
         Promise.all([fetchRewards(), fetchUserRedemptions()])
-          .finally(() => setIsFetching(false));
+          .finally(() => {
+            setIsFetching(false);
+            setLoading(false);
+          });
       } else {
         fetchUserRedemptions();
       }
@@ -162,11 +136,7 @@ const Rewards = React.memo(() => {
     loadRewards();
   }, [fetchRewards, fetchUserRedemptions]);
 
-  useEffect(() => {
-    if (userLocation && user) {
-      checkNearbyRewards();
-    }
-  }, [userLocation, user, checkNearbyRewards]);
+
 
   useEffect(() => {
     if (user) {
@@ -174,15 +144,10 @@ const Rewards = React.memo(() => {
     }
   }, [user]);
 
-  // Helper function to check if reward is redeemable at current location
+  // ⚡ Location not required - all rewards can be redeemed anywhere
   const isRewardNearby = (reward) => {
-    // If no location or no nearby rewards data, assume not nearby
-    if (!userLocation) return false;
-    if (!nearbyRewards || nearbyRewards.length === 0) return false;
-    
-    // Check if this specific reward is in the nearby rewards list
-    const isNear = nearbyRewards.some(nr => nr.id === reward.id);
-    return isNear;
+    // All rewards available if they have destinations
+    return reward.destinations && reward.destinations.length > 0;
   };
 
   const handleLogout = () => {
@@ -191,11 +156,6 @@ const Rewards = React.memo(() => {
   };
 
   const handleRedeem = async (reward) => {
-    if (!userLocation) {
-      toast.error('Please enable location services to redeem rewards');
-      return;
-    }
-
     if (userPoints < reward.points_required) {
       toast.error('Not enough points to redeem this reward');
       return;
@@ -207,21 +167,30 @@ const Rewards = React.memo(() => {
       return;
     }
 
-    // For now, use the first available destination
-    // TODO: Let user select destination if multiple available
-    const destination = reward.destinations[0];
+    // Show destination selection modal
+    setPendingReward(reward);
+    setPendingRedemption(null);
+    setShowDestinationModal(true);
+  };
+
+  const confirmRedeem = async (destinationId) => {
+    if (!pendingReward) return;
+
+    console.log('🎁 Redeeming reward:', {
+      reward_id: pendingReward.id,
+      reward_title: pendingReward.title,
+      destination_id: destinationId
+    });
 
     try {
-      const response = await rewardService.redeemReward(reward.id, {
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        destination_id: destination.destination_id
-      });
+      const response = await rewardService.redeemReward(pendingReward.id, destinationId);
+      
+      console.log('✅ Redemption response:', response);
 
       toast.success(response.data?.message || 'Reward redeemed successfully!');
       
       // Update local state immediately for instant feedback
-      setUserPoints(response.data?.remaining_points || userPoints - reward.points_required);
+      setUserPoints(response.data?.remaining_points || userPoints - pendingReward.points_required);
       
       // Refresh user data from server to sync points
       await refreshUser();
@@ -229,6 +198,10 @@ const Rewards = React.memo(() => {
       // Refresh data
       fetchRewards();
       fetchUserRedemptions();
+      
+      // Close modal
+      setShowDestinationModal(false);
+      setPendingReward(null);
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Failed to redeem reward';
       toast.error(errorMessage);
@@ -237,27 +210,25 @@ const Rewards = React.memo(() => {
   };
 
   const handleChangeReward = async (redemption, newReward) => {
-    if (!userLocation) {
-      toast.error('Please enable location services to change rewards');
-      return;
-    }
-
     if (!newReward.destinations || newReward.destinations.length === 0) {
       toast.error('This reward has no available locations');
       return;
     }
 
-    const destination = newReward.destinations[0];
+    // Show destination selection modal
+    setPendingReward(newReward);
+    setPendingRedemption(redemption);
+    setShowDestinationModal(true);
+  };
+
+  const confirmChangeReward = async (destinationId) => {
+    if (!pendingReward || !pendingRedemption) return;
 
     try {
       const response = await rewardService.changeReward(
-        redemption.id,
-        newReward.id,
-        {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-          destination_id: destination.destination_id
-        }
+        pendingRedemption.id,
+        pendingReward.id,
+        destinationId
       );
 
       toast.success(response.data?.message || 'Reward changed successfully!');
@@ -271,6 +242,11 @@ const Rewards = React.memo(() => {
       // Refresh data
       fetchRewards();
       fetchUserRedemptions();
+      
+      // Close modal
+      setShowDestinationModal(false);
+      setPendingReward(null);
+      setPendingRedemption(null);
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Failed to change reward';
       toast.error(errorMessage);
@@ -299,18 +275,24 @@ const Rewards = React.memo(() => {
   }, [activeCategory]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 relative">
-      {/* Decorative Background */}
-      <div className="absolute inset-0 opacity-5">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-teal-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
-        <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+    <div className="min-h-screen bg-white relative pb-20 sm:pb-0">
+      {/* Decorative Background Pattern */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-teal-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+          <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+          <div className="absolute bottom-20 left-1/2 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000"></div>
+        </div>
+        {/* Dot Pattern */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #0d9488 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
       </div>
       
       <ToastNotification />
       <FetchingIndicator isFetching={isFetching} />
       
-      <UserHeader user={user} onLogout={handleLogout} />
-
+      {/* Main Content Container - blur only (keep clicks active) */}
+      <div className={`transition-all duration-300 ${showScanModal || showRedeemModal || showDestinationModal ? 'blur-sm' : ''}`}>
+      
       <UserDashboardTabs 
         onCollapseChange={handleSidebarCollapse} 
         onScannerClick={() => {
@@ -321,46 +303,34 @@ const Rewards = React.memo(() => {
       />
 
       {/* Main Content */}
-      <main 
-        className={`
-          relative z-10
-          transition-all duration-300 ease-in-out
-          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
-          max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-12
-        `}
-      >
-        <motion.h1 
-          className="text-3xl font-bold text-slate-900 mb-6"
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-        >
-          Your Adventure
-        </motion.h1>
-
-        {/* Location Status Alert */}
-        {!userLocation && (
-          <motion.div 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">⚠️</span>
-              <span className="text-amber-800 font-medium">{locationError || 'Location services disabled'}</span>
+      <div className={`transition-all duration-300 pb-16 md:pb-0 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+        {/* Page Header */}
+        <header className="bg-gradient-to-r from-teal-500 to-cyan-600 shadow-lg mt-14 md:mt-16 lg:mt-0 md:sticky md:top-16 lg:sticky lg:top-0 z-30">
+          <div className="px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <Gift className="w-7 h-7 text-white drop-shadow" strokeWidth={2.5} />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold text-white mb-1">Rewards</h1>
+                  <p className="text-sm text-teal-50 mt-1">Redeem your points for exciting rewards</p>
+                </div>
+              </div>
+              <div className="hidden sm:flex items-center gap-3 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/30">
+                <Star className="w-5 h-5 text-yellow-300" fill="currentColor" />
+                <span className="text-white font-bold">{userPoints} pts</span>
+              </div>
             </div>
-            <button
-              onClick={getUserLocation}
-              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors font-medium"
-            >
-              Enable Location
-            </button>
-          </motion.div>
-        )}
+          </div>
+        </header>
 
-        <div className="space-y-6">
-            {/* Points Balance Card */}
-            <motion.div 
+        {/* Main Content Area */}
+        <main className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto mt-6">
+
+            <div className="space-y-6">
+              {/* Points Balance Card */}
+              <motion.div 
               className="bg-gradient-to-r from-orange-500 via-pink-500 to-pink-600 rounded-xl p-6 text-white shadow-md"
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -379,87 +349,57 @@ const Rewards = React.memo(() => {
             </motion.div>
 
             {/* Browse Rewards Section */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-              <div className="p-4 border-b border-slate-200">
+            <div className="bg-white rounded-xl shadow-lg border border-teal-200 relative z-10">
+              <div className="p-4 border-b border-teal-100">
                 <h3 className="text-lg font-semibold text-slate-900">Browse Rewards</h3>
               </div>
               
-              <div className="p-4">
+              <div className="p-4 overflow-visible">
               
                 {categoriesLoading ? (
-                  <div className="flex gap-3 mb-6 overflow-x-hidden">
-                    {[...Array(6)].map((_, i) => (
-                      <div key={i} className="h-10 bg-slate-200 rounded-lg animate-pulse flex-shrink-0" style={{width: '120px'}}></div>
-                    ))}
+                  <div className="mb-4">
+                    <div className="h-12 bg-slate-200 rounded-lg animate-pulse"></div>
                   </div>
                 ) : (
-                  <div 
-                    className="flex gap-2 mb-4 overflow-x-auto pb-2 category-scrollbar"
-                    style={{
-                      scrollbarWidth: 'thin',
-                      scrollbarColor: 'rgba(148, 163, 184, 0.3) transparent'
-                    }}
-                  >
-                    <style>{`
-                      .category-scrollbar::-webkit-scrollbar {
-                        height: 6px;
-                      }
-                      .category-scrollbar::-webkit-scrollbar-track {
-                        background: transparent;
-                      }
-                      .category-scrollbar::-webkit-scrollbar-thumb {
-                        background: rgba(148, 163, 184, 0.3);
-                        border-radius: 10px;
-                      }
-                      .category-scrollbar::-webkit-scrollbar-thumb:hover {
-                        background: rgba(148, 163, 184, 0.5);
-                      }
-                    `}</style>
-                    <button
-                      onClick={() => setActiveCategory('all')}
-                      className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap text-sm ${
-                        activeCategory === 'all'
-                          ? 'bg-teal-500 text-white shadow-sm'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
+                  <div className="mb-4 relative z-50 pointer-events-auto">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Filter by Category</label>
+                    <select
+                      value={activeCategory}
+                      onChange={(e) => setActiveCategory(e.target.value)}
+                      className="w-64 px-4 py-3 bg-white border-2 border-teal-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900 font-medium cursor-pointer hover:border-teal-400 shadow-sm relative z-50 pointer-events-auto"
+                      style={{ pointerEvents: 'auto' }}
                     >
-                      All Rewards
-                    </button>
-                    {categories.map((category) => (
-                      <button
-                        key={`category-${category.id}`}
-                        onClick={() => setActiveCategory(category.id)}
-                        className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap text-sm ${
-                          activeCategory === category.id
-                            ? 'bg-teal-500 text-white shadow-sm'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        {category.name}
-                      </button>
-                    ))}
+                      <option value="all">All Rewards</option>
+                      {categories.map((category) => (
+                        <option key={`category-${category.id}`} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
 
                 {/* Rewards Grid */}
                 {loading ? (
-                  <div className="text-center py-16">
-                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
-                    <p className="text-slate-600 mt-4">Loading rewards...</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <SkeletonLoader type="card" count={6} />
                   </div>
                 ) : (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {paginatedRewards.map((reward) => {
-                        const isNearby = isRewardNearby(reward);
+                        const hasDestinations = reward.destinations && reward.destinations.length > 0;
                         const hasEnoughPoints = userPoints >= reward.points_required;
-                        // Count how many times user has redeemed this specific reward
-                        const redemptionCount = redeemedRewards.filter(r => r.reward_id === reward.id && r.status === 'active').length;
+                        // Count how many times user has redeemed this specific reward (active, pending, used)
+                        const redemptionCount = redeemedRewards.filter(r => 
+                          r.reward_id === reward.id && 
+                          ['active', 'pending', 'used'].includes(r.status)
+                        ).length;
                         const isRedeemed = redemptionCount >= (reward.max_redemptions_per_user || 1);
-                        const canRedeem = userLocation && isNearby && hasEnoughPoints && !isRedeemed;
+                        const canRedeem = hasDestinations && hasEnoughPoints && !isRedeemed;
                         
                         return (
-                          <div key={reward.id} className={`border border-slate-200 rounded-lg p-4 hover:shadow-md hover:border-teal-300 transition-all duration-200 bg-white flex flex-col h-full ${isRedeemed ? 'opacity-75' : ''}`}>
+                            <div key={reward.id} className={`border-2 border-teal-300 rounded-xl p-5 shadow-md hover:shadow-xl hover:border-teal-500 transition-all duration-200 bg-white flex flex-col h-full ${isRedeemed ? 'opacity-75' : ''}`}>
                             <div className="flex justify-center mb-3 relative">
                               <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-teal-600 rounded-lg flex items-center justify-center shadow-sm">
                                 <span className="text-3xl">🎁</span>
@@ -478,14 +418,9 @@ const Rewards = React.memo(() => {
                               {reward.destinations && reward.destinations.length > 0 && (
                                 <div className="text-xs text-slate-500 mb-2 flex items-start gap-1 justify-center">
                                   <span className="flex-shrink-0">📍</span>
-                                  <span className="line-clamp-1">{reward.destinations.map(d => d.name).join(', ')}</span>
-                                </div>
-                              )}
-                              
-                              {!isNearby && userLocation && (
-                                <div className="text-xs text-amber-700 bg-amber-50 px-2 py-1.5 rounded-md mb-3 flex items-center gap-1 justify-center">
-                                  <span>⚠️</span>
-                                  <span>Too far</span>
+                                  <span className="line-clamp-1">
+                                    {reward.destinations.length} location{reward.destinations.length > 1 ? 's' : ''} available
+                                  </span>
                                 </div>
                               )}
                               
@@ -501,10 +436,9 @@ const Rewards = React.memo(() => {
                                   className="w-full text-xs"
                                 >
                                   {isRedeemed ? '✓ Already Redeemed' :
-                                   !userLocation ? '📍 Enable Location' : 
-                                   !isNearby ? '🚫 Too Far' :
+                                   !hasDestinations ? '🚫 No Locations' :
                                    !hasEnoughPoints ? '🔒 Not Enough Points' : 
-                                   'Redeem'}
+                                   'Redeem Now'}
                                 </Button>
                               </div>
                             </div>
@@ -563,7 +497,7 @@ const Rewards = React.memo(() => {
 
             {/* Redeemed Rewards - Compact Elegant Design */}
             {redeemedRewards.length > 0 && (
-              <div className="bg-gradient-to-br from-white to-slate-50 rounded-xl p-4 border border-slate-200 shadow-md">
+              <div className="bg-gradient-to-br from-white to-slate-50 rounded-xl p-4 border border-teal-200 shadow-sm">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-lg flex items-center justify-center shadow-sm">
                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -578,24 +512,28 @@ const Rewards = React.memo(() => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {redeemedRewards.map((redemption) => {
+                    // ⚡ Check if expired
+                    const isExpired = new Date(redemption.valid_until) < new Date();
+                    const displayStatus = isExpired && redemption.status === 'active' ? 'expired' : redemption.status;
+                    
                     const statusConfig = {
                       active: { bg: 'bg-green-100', text: 'text-green-700', icon: '✓', label: 'Active' },
                       used: { bg: 'bg-blue-100', text: 'text-blue-700', icon: '✓', label: 'Used' },
                       expired: { bg: 'bg-red-100', text: 'text-red-700', icon: '✕', label: 'Expired' },
                       pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', icon: '⏱', label: 'Pending' }
                     };
-                    const status = statusConfig[redemption.status] || statusConfig.pending;
+                    const status = statusConfig[displayStatus] || statusConfig.pending;
                     
                     return (
                       <motion.div 
                         key={redemption.id} 
                         variants={scaleIn}
-                        className="group bg-white rounded-lg p-3 border border-slate-200 hover:border-teal-300 hover:shadow-lg transition-all duration-300"
+                        className="group bg-white rounded-lg p-3 border border-teal-200 hover:border-teal-400 hover:shadow-md transition-all duration-300 shadow-sm"
                       >
                         {/* Header with Status */}
                         <div className="flex items-start justify-between mb-2.5">
                           <h4 className="font-semibold text-sm text-slate-900 line-clamp-1 flex-1 pr-2">
-                            {redemption.reward?.title}
+                            {redemption.reward_title || redemption.reward?.title || 'Reward'}
                           </h4>
                           <span className={`${status.bg} ${status.text} px-2 py-0.5 rounded-full text-xs font-bold whitespace-nowrap`}>
                             {status.icon} {status.label}
@@ -624,8 +562,18 @@ const Rewards = React.memo(() => {
                           </div>
                         </div>
                         
+                        {/* Expired Warning */}
+                        {isExpired && redemption.status === 'active' && (
+                          <div className="pt-2 border-t border-slate-100">
+                            <div className="text-xs text-red-600 bg-red-50 px-2 py-1.5 rounded-md flex items-center gap-1">
+                              <span>⚠️</span>
+                              <span>This reward has expired</span>
+                            </div>
+                          </div>
+                        )}
+                        
                         {/* Change Reward - Compact */}
-                        {['active', 'pending'].includes(redemption.status) && userLocation && (
+                        {['active', 'pending'].includes(redemption.status) && !isExpired && (
                           <div className="pt-2 border-t border-slate-100">
                             <select
                               className="w-full px-2 py-1.5 border border-slate-200 rounded-md text-xs focus:border-teal-400 focus:ring-1 focus:ring-teal-100 outline-none transition-all bg-white"
@@ -650,7 +598,6 @@ const Rewards = React.memo(() => {
                                 ))
                               }
                             </select>
-                            <p className="text-xs text-slate-400 mt-1">💡 Within 100m of destination</p>
                           </div>
                         )}
                       </motion.div>
@@ -659,11 +606,15 @@ const Rewards = React.memo(() => {
                 </div>
               </div>
             )}
-        </div>
-      </main>
+          </div>
+        </main>
+      </div>
 
-      {/* QR Scanner Modal */}
-      {showScanModal && (
+    </div>
+    {/* End of blur wrapper */}
+
+    {/* QR Scanner Modal - OUTSIDE blur wrapper */}
+    {showScanModal && (
         <Modal
           isOpen={showScanModal}
           onClose={() => {
@@ -681,10 +632,10 @@ const Rewards = React.memo(() => {
             onClose={() => setShowScanModal(false)}
           />
         </Modal>
-      )}
+    )}
 
-      {/* Check-In Review Modal */}
-      {showReviewModal && checkInDestination && (
+    {/* Check-In Review Modal - OUTSIDE blur wrapper */}
+    {showReviewModal && checkInDestination && (
         <Modal
           isOpen={showReviewModal}
           onClose={() => {
@@ -711,8 +662,87 @@ const Rewards = React.memo(() => {
             }}
           />
         </Modal>
-      )}
-    </div>
+    )}
+
+    {/* Destination Selection Modal - OUTSIDE blur wrapper */}
+    {showDestinationModal && pendingReward && (
+        <Modal
+          isOpen={showDestinationModal}
+          onClose={() => {
+            setShowDestinationModal(false);
+            setPendingReward(null);
+            setPendingRedemption(null);
+          }}
+          title="Select Destination"
+          size="md"
+        >
+          <div className="space-y-4">
+            <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+              <h3 className="font-semibold text-teal-900 mb-1">{pendingReward.title}</h3>
+              <p className="text-sm text-teal-700">
+                {pendingRedemption 
+                  ? `Change to this reward (Point difference: ${pendingReward.points_required - pendingRedemption.points_spent} pts)`
+                  : `Cost: ${pendingReward.points_required} points`
+                }
+              </p>
+            </div>
+            
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-3">
+                Choose where you want to redeem this reward:
+              </p>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {pendingReward.destinations?.map((dest) => (
+                  <button
+                    key={dest.destination_id}
+                    onClick={() => {
+                      if (pendingRedemption) {
+                        confirmChangeReward(dest.destination_id);
+                      } else {
+                        confirmRedeem(dest.destination_id);
+                      }
+                    }}
+                    className="w-full text-left p-4 bg-white border-2 border-slate-200 rounded-lg hover:border-teal-500 hover:bg-teal-50 transition-all duration-200 group"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0 w-10 h-10 bg-teal-100 rounded-lg flex items-center justify-center group-hover:bg-teal-200 transition-colors">
+                        <span className="text-xl">📍</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-slate-900 group-hover:text-teal-700 transition-colors">
+                          {dest.destination_name || dest.name || `Destination ${dest.destination_id}`}
+                        </h4>
+                        {dest.address && (
+                          <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">
+                            {dest.address}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex-shrink-0 text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                        →
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-200">
+              <button
+                onClick={() => {
+                  setShowDestinationModal(false);
+                  setPendingReward(null);
+                  setPendingRedemption(null);
+                }}
+                className="w-full px-4 py-2 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </Modal>
+    )}
+  </div>
   );
 });
 

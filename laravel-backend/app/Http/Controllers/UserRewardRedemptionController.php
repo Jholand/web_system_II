@@ -62,6 +62,14 @@ class UserRewardRedemptionController extends Controller
         ]);
 
         $user = $request->user();
+        $destinationId = $request->input('destination_id');
+        
+        \Log::info('🎁 Redeem Request:', [
+            'user_id' => $user->id,
+            'reward_id' => $rewardId,
+            'destination_id' => $destinationId,
+            'request_data' => $request->all()
+        ]);
         
         // Get reward with destinations
         $reward = Reward::with('destinations')->findOrFail($rewardId);
@@ -90,30 +98,16 @@ class UserRewardRedemptionController extends Controller
             return $this->errorResponse('Insufficient points. You need ' . $reward->points_required . ' points.', 400);
         }
 
-        // Check if reward can be redeemed at this destination
-        $destinationId = $request->input('destination_id');
+        // Check if reward can be redeemed at this destination (destinationId already set above)
         if (!$reward->canBeUsedAt($destinationId)) {
             return $this->errorResponse('This reward cannot be redeemed at the selected destination', 400);
         }
 
-        // Get destination coordinates
+        // Get destination for reference (location validation disabled)
         $destination = Destination::findOrFail($destinationId);
 
-        // Calculate distance (Haversine formula)
-        $distance = $this->calculateDistance(
-            $request->input('latitude'),
-            $request->input('longitude'),
-            $destination->latitude,
-            $destination->longitude
-        );
-
-        // ⚡ CRITICAL: Check if user is within 200 meters (STRICT ENFORCEMENT)
-        if ($distance > 200) {
-            return $this->errorResponse(
-                'You must be within 200 meters of ' . $destination->name . ' to redeem this reward. You are currently ' . round($distance) . ' meters away. Please move closer to the destination.',
-                403 // 403 Forbidden - cannot bypass this
-            );
-        }
+        // ⚡ LOCATION VALIDATION DISABLED - User can redeem from anywhere
+        // Distance calculation removed - no range restriction
 
         // Check max redemptions per user
         $userRedemptionCount = UserRewardRedemption::where('user_id', $user->id)
@@ -146,6 +140,7 @@ class UserRewardRedemptionController extends Controller
             $redemption = UserRewardRedemption::create([
                 'user_id' => $user->id,
                 'reward_id' => $reward->id,
+                'destination_id' => $destinationId, // ⚡ Track where it was redeemed
                 'points_spent' => $reward->points_required,
                 'redemption_code' => $this->generateRedemptionCode(),
                 'status' => 'active',
@@ -218,24 +213,11 @@ class UserRewardRedemptionController extends Controller
             return $this->errorResponse('The selected reward cannot be redeemed at this destination', 400);
         }
 
-        // Get destination coordinates
+        // Get destination for reference (location validation disabled)
         $destination = Destination::findOrFail($destinationId);
 
-        // Calculate distance
-        $distance = $this->calculateDistance(
-            $request->input('latitude'),
-            $request->input('longitude'),
-            $destination->latitude,
-            $destination->longitude
-        );
-
-        // ⚡ CRITICAL: Check if user is within 200 meters (STRICT ENFORCEMENT)
-        if ($distance > 200) {
-            return $this->errorResponse(
-                'You must be within 200 meters of ' . $destination->name . ' to change this reward. You are currently ' . round($distance) . ' meters away. Please move closer to the destination.',
-                403 // 403 Forbidden - cannot bypass this
-            );
-        }
+        // ⚡ LOCATION VALIDATION DISABLED - User can change reward from anywhere
+        // Distance calculation removed - no range restriction
 
         // Calculate point difference
         $pointDifference = $newReward->points_required - $oldRedemption->points_spent;
@@ -295,6 +277,7 @@ class UserRewardRedemptionController extends Controller
             $newRedemption = UserRewardRedemption::create([
                 'user_id' => $user->id,
                 'reward_id' => $newReward->id,
+                'destination_id' => $destinationId, // ⚡ Track where it was redeemed
                 'points_spent' => $newReward->points_required,
                 'redemption_code' => $this->generateRedemptionCode(),
                 'status' => 'active',

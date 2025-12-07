@@ -123,45 +123,50 @@ const UserSettings = React.memo(() => {
   }, [fetchDestinations]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 relative">
-      {/* Decorative Background */}
-      <div className="absolute inset-0 opacity-5">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-teal-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
-        <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+    <div className="min-h-screen bg-white relative pb-20 sm:pb-0">
+      {/* Decorative Background Pattern */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-teal-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+          <div className="absolute top-40 right-10 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+          <div className="absolute bottom-20 left-1/2 w-72 h-72 bg-cyan-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000"></div>
+        </div>
+        {/* Dot Pattern */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #0d9488 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
       </div>
       
       <ToastNotification />
-      
-      
-      <UserHeader user={user} onLogout={handleLogout} />
-
       <UserDashboardTabs onCollapseChange={handleSidebarCollapse} onScannerClick={handleScannerClick} />
 
       {/* Main Content */}
-      <main 
-        className={`
-          relative z-10
-          transition-all duration-300 ease-in-out
-          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
-          max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-32 sm:pb-20 md:pb-8
-        `}
-      >
+      <div className={`transition-all duration-300 pb-16 md:pb-0 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
         {/* Page Header */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-            Settings
-          </h1>
-          <p className="text-sm text-gray-600">
-            Manage your account preferences and security
-          </p>
-        </motion.div>
+        <header className="bg-gradient-to-r from-teal-500 to-cyan-600 shadow-lg mt-14 md:mt-16 lg:mt-0 md:sticky md:top-16 lg:sticky lg:top-0 z-30">
+          <div className="px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                <svg className="w-7 h-7 text-white drop-shadow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white drop-shadow-sm">
+                  Settings
+                </h1>
+                <p className="text-sm text-teal-50 mt-1">
+                  Manage your account preferences and security
+                </p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content Area */}
+        <main className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto mt-6">
 
         <motion.div 
-          className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+          className="bg-white rounded-2xl shadow-sm border border-teal-200 overflow-hidden"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
@@ -244,7 +249,7 @@ const UserSettings = React.memo(() => {
                     ) : recentCheckIns.length > 0 ? (
                       <div className="space-y-3">
                         {recentCheckIns.map((checkIn, index) => (
-                          <div key={checkIn.id || `checkin-${index}`} className="flex items-center justify-between p-3 bg-white rounded-lg border border-teal-100 hover:shadow-md transition-shadow">
+                          <div key={checkIn.id || `checkin-${index}`} className="flex items-center justify-between p-3 bg-white rounded-lg border border-cyan-100 hover:shadow-md transition-shadow">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center flex-shrink-0">
                                 <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -421,7 +426,8 @@ const UserSettings = React.memo(() => {
             )}
           </motion.div>
         </motion.div>
-      </main>
+        </main>
+      </div>
 
       {/* QR Scanner Modal */}
       {showScanModal && (

@@ -172,6 +172,18 @@ class AuthController extends Controller
         });
 
         // ULTRA-FAST: Return minimal essential user data
+        // Determine role
+        $role = 'user';
+        $redirect = '/user/map';
+        
+        if ($user->role_id === 1) {
+            $role = 'admin';
+            $redirect = '/admin/dashboard';
+        } elseif ($user->role_id === 4) {
+            $role = 'owner';
+            $redirect = '/owner/dashboard';
+        }
+        
         return response()->json([
             'success' => true,
             'message' => 'Login successful',
@@ -179,12 +191,13 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->first_name . ' ' . $user->last_name,
                 'email' => $user->email,
-                'role' => $user->role_id === 1 ? 'admin' : 'user',
+                'role' => $role,
+                'role_id' => $user->role_id, // Add role_id for permission checks
                 'status' => $this->getStatusName($user->status_id),
                 'total_points' => $user->total_points ?? 0,
             ],
             'token' => $token,
-            'redirect' => $user->role_id === 1 ? '/admin/dashboard' : '/user/map',
+            'redirect' => $redirect,
         ])->header('Cache-Control', 'no-cache, private');
     }
 
@@ -221,7 +234,7 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->first_name . ' ' . $user->last_name,
                 'email' => $user->email,
-                'role' => $user->role_id === 1 ? 'admin' : 'user',
+                'role' => $user->role_id === 1 ? 'admin' : ($user->role_id === 4 ? 'owner' : 'user'),
                 'status' => $this->getStatusName($user->status_id),
                 'total_points' => $user->total_points ?? 0,
             ],
@@ -240,7 +253,7 @@ class AuthController extends Controller
                     'id' => $user->id,
                     'name' => $user->first_name . ' ' . $user->last_name,
                     'email' => $user->email,
-                    'role' => $user->role_id === 1 ? 'admin' : 'user',
+                    'role' => $user->role_id === 1 ? 'admin' : ($user->role_id === 4 ? 'owner' : 'user'),
                     'status' => $this->getStatusName($user->status_id),
                     'total_points' => $user->total_points ?? 0,
                 ],

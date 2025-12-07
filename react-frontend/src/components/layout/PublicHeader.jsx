@@ -85,11 +85,7 @@ const PublicHeader = ({ onLoginClick, onRegisterClick }) => {
           <div className="hidden md:flex items-center space-x-4">
             <button
               onClick={onLoginClick}
-              className={`px-5 py-2 font-normal rounded-lg transition-all ${
-                isScrolled || location.pathname !== '/'
-                  ? 'bg-slate-900 text-white hover:bg-slate-800'
-                  : 'text-white hover:bg-white/20 border border-white/30'
-              }`}
+              className="px-5 py-2 font-normal rounded-lg transition-all bg-slate-900 text-white hover:bg-slate-800"
             >
               Log In
             </button>

@@ -20,6 +20,7 @@ class DestinationService
                 ->select([
                     'destination_id',
                     'category_id',
+                    'owner_id',
                     'name',
                     'slug',
                     'description',
@@ -37,6 +38,7 @@ class DestinationService
                 ])
                 ->with([
                     'category:category_id,category_name,icon',
+                    'owner:id,first_name,last_name,email',
                     'images' => function ($query) {
                         $query->select('destination_images_id', 'destination_id', 'image_path', 'is_primary', 'title')
                             ->orderBy('is_primary', 'desc') // Primary images first

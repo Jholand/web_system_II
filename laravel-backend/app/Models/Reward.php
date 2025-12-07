@@ -15,6 +15,7 @@ class Reward extends Model
     use SoftDeletes, Searchable, Filterable, Cacheable, HasSlug;
     
     protected $fillable = [
+        'created_by',
         'category_id',
         'title',
         'slug',
@@ -124,7 +125,17 @@ class Reward extends Model
             'destination_id',
             'id',
             'destination_id'
-        )->withTimestamps();
+        )->withTimestamps()
+         ->select([
+            'destinations.destination_id',
+            'destinations.category_id',
+            'destinations.name',
+            'destinations.city',
+            'destinations.province',
+            'destinations.barangay',
+            'destinations.street_address'
+            // Exclude 'location' field (binary POINT data)
+        ]);
     }
 
     /**
@@ -135,6 +146,14 @@ class Reward extends Model
         return $this->destinations()
             ->wherePivot('destination_id', $destinationId)
             ->exists();
+    }
+
+    /**
+     * Relationship: Reward belongs to a User (who created it)
+     */
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     /**

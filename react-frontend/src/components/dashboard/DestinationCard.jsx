@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { MapPin, Users, Eye, Edit, Trash2 } from 'lucide-react';
+import { MapPin, Users, Eye, Edit, Trash2, User } from 'lucide-react';
 
 const DestinationCard = ({ 
   title, 
   category, 
   categoryColor, 
   categoryIcon,
+  categoryIconUrl,
   description, 
   points, 
   location,
@@ -16,6 +17,7 @@ const DestinationCard = ({
   latitude,
   longitude,
   visitors,
+  ownerName,
   onView,
   onEdit,
   onDelete 
@@ -111,9 +113,9 @@ const DestinationCard = ({
   };
 
   return (
-    <div className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100">
+    <div className="group bg-gradient-to-br from-white via-teal-50/30 to-cyan-50/30 rounded-xl overflow-hidden shadow-[0_8px_20px_rgba(20,184,166,0.15)] hover:shadow-2xl transition-all duration-300 border-2 border-teal-200 hover:border-teal-400 hover:from-teal-50 hover:via-cyan-50 hover:to-blue-50 hover:scale-[1.02] flex flex-col h-full">
       {/* Image */}
-      <div className="relative h-48 overflow-hidden">
+      <div className="relative h-48 overflow-hidden bg-slate-100 flex-shrink-0">
         <img 
           src={getImageUrl()}
           alt={title}
@@ -123,18 +125,23 @@ const DestinationCard = ({
         />
         
         {/* Points Badge */}
-        <div className="absolute top-3 right-3 bg-teal-600 text-white px-3 py-1.5 rounded-full text-sm font-semibold shadow-lg">
+        <div className="absolute top-3 right-3 bg-gradient-to-br from-teal-500 to-cyan-600 text-white px-3 py-1.5 rounded-full text-sm font-semibold shadow-lg">
           +{points} pts
         </div>
 
         {/* Category Badge */}
-        <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-medium text-gray-700 shadow-md">
-          {categoryIcon} {category}
+        <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-medium text-gray-700 shadow-md flex items-center gap-1.5">
+          {categoryIconUrl ? (
+            <img src={categoryIconUrl} alt={category} className="w-4 h-4 rounded object-cover" />
+          ) : (
+            <span>{categoryIcon}</span>
+          )}
+          <span>{category}</span>
         </div>
       </div>
 
       {/* Content */}
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3 flex flex-col flex-grow">
         {/* Title */}
         <h3 className="text-lg font-semibold text-gray-900 line-clamp-1 group-hover:text-teal-600 transition-colors">
           {title}
@@ -147,19 +154,30 @@ const DestinationCard = ({
         </div>
 
         {/* Stats */}
-        <div className="flex items-center gap-4 pt-2 border-t border-gray-100">
-          <div className="flex items-center gap-1.5 text-sm text-gray-600">
-            <Users className="w-4 h-4 text-teal-600" />
-            <span>{(visitors || 0).toLocaleString()}</span>
+        <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5 text-sm text-gray-600">
+              <Users className="w-4 h-4 text-teal-600" />
+              <span>{(visitors || 0).toLocaleString()}</span>
+            </div>
+            <div className="flex items-center gap-1 text-sm text-gray-600">
+              <span className="text-amber-500">📍</span>
+              <span>{getDistance()}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1 text-sm text-gray-600">
-            <span className="text-amber-500">📍</span>
-            <span>{getDistance()}</span>
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <User className="w-3.5 h-3.5 text-slate-500" />
+            <span className="font-medium text-slate-600">Owner:</span>
+            {ownerName ? (
+              <span className="line-clamp-1">{ownerName}</span>
+            ) : (
+              <span className="text-slate-400 italic">No owner</span>
+            )}
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-2 pt-2">
+        <div className="flex gap-2 pt-2 mt-auto">
           <button
             onClick={onView}
             className="flex-1 bg-gray-900 hover:bg-teal-600 text-white py-2.5 rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"

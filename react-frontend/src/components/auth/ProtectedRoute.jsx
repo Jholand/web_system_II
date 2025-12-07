@@ -36,9 +36,16 @@ const ProtectedRoute = ({ children, requiredRole = null }) => {
       return <Navigate to="/user/dashboard" state={{ message: 'Access denied. Admin privileges required.' }} replace />;
     }
     
+    if (requiredRole === 'owner' && user.role !== 'owner') {
+      // Non-owner trying to access owner routes - redirect to their dashboard
+      const redirectPath = user.role === 'admin' ? '/admin/dashboard' : '/user/dashboard';
+      return <Navigate to={redirectPath} state={{ message: 'Access denied. Owner privileges required.' }} replace />;
+    }
+    
     if (requiredRole === 'user' && user.role !== 'user') {
-      // Admin trying to access user routes - redirect to admin dashboard
-      return <Navigate to="/admin/dashboard" state={{ message: 'Access denied. User access only.' }} replace />;
+      // Admin/Owner trying to access user routes - redirect to their dashboard
+      const redirectPath = user.role === 'admin' ? '/admin/dashboard' : '/owner/dashboard';
+      return <Navigate to={redirectPath} state={{ message: 'Access denied. User access only.' }} replace />;
     }
   }
 

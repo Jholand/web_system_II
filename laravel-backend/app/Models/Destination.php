@@ -50,6 +50,14 @@ class Destination extends Model
         'visit_radius',
         'status',
         'created_by',
+        'owner_id',
+    ];
+    
+    /**
+     * Hide binary fields from JSON serialization
+     */
+    protected $hidden = [
+        'location', // Binary POINT field causes encoding issues
     ];
     
     protected $casts = [
@@ -81,6 +89,11 @@ class Destination extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+    
+    public function owner()
+    {
+        return $this->belongsTo(User::class, 'owner_id');
     }
     
     public function images()

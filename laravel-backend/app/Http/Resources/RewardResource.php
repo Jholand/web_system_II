@@ -14,11 +14,26 @@ class RewardResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        $user = auth()->user();
+        $isAdmin = $user && $user->role_id === 1;
+        $isCreator = $user && $this->created_by === $user->id;
+        $creatorIsAdmin = $this->creator && $this->creator->role_id === 1;
+        
+        // Determine permissions:
+        // If reward created by admin: only admin can access
+        // If reward created by owner: admin + owner can access
+        $canAccess = false;
+        if ($creatorIsAdmin) {
+            $canAccess = $isAdmin; // Only admin can access admin-created rewards
+        } else {
+            $canAccess = $isAdmin || $isCreator; // Admin or owner can access owner-created rewards
+        }
+
         return [
             'id' => $this->id,
             'category_id' => $this->category_id,
             'category' => $this->category ? [
-                'id' => $this->category->category_id, // ⚡ FIX: Use category_id (primary key)
+                'id' => $this->category->category_id,
                 'name' => $this->category->category_name,
                 'icon' => $this->category->icon,
             ] : null,
@@ -49,15 +64,32 @@ class RewardResource extends JsonResource
             'total_redeemed' => $this->total_redeemed ?? 0,
             'destinations' => $this->whenLoaded('destinations', function () {
                 return $this->destinations->map(function ($destination) {
+                    $locationParts = array_filter([
+                        $destination->barangay,
+                        $destination->city,
+                        $destination->province
+                    ]);
+                    
                     return [
                         'id' => $destination->id,
                         'destination_id' => $destination->destination_id,
                         'name' => $destination->name,
                         'city' => $destination->city,
-                        'category' => $destination->category?->category_name ?? 'N/A',
+                        'province' => $destination->province,
+                        'barangay' => $destination->barangay,
+                        'street_address' => $destination->street_address,
+                        'location' => !empty($locationParts) ? implode(', ', $locationParts) : null,
+                        'category' => $destination->category?->category_name ?? null,
                     ];
                 });
             }),
+            'created_by' => $this->created_by,
+            'creator_is_admin' => $creatorIsAdmin,
+            'can_edit' => $canAccess,
+            'can_delete' => $canAccess,
+            'can_add_stock' => $canAccess,
+            'can_view' => true,
+            'is_creator' => $isCreator,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

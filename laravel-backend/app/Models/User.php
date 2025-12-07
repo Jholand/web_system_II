@@ -67,6 +67,19 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the user's full name attribute
+     */
+    public function getNameAttribute(): string
+    {
+        return trim("{$this->first_name} {$this->last_name}");
+    }
+
+    /**
+     * Append the name attribute to JSON
+     */
+    protected $appends = ['name'];
+
+    /**
      * Get the addresses for the user.
      */
     public function addresses()
@@ -88,6 +101,14 @@ class User extends Authenticatable
     public function reviews()
     {
         return $this->hasMany(DestinationReview::class);
+    }
+
+    /**
+     * Get the user's owned destinations.
+     */
+    public function destinations()
+    {
+        return $this->hasMany(Destination::class, 'owner_id');
     }
 
     /**

@@ -13,7 +13,11 @@ export const rewardService = {
   getAllRewards: async (filters = {}) => {
     try {
       const response = await axios.get(`${API_URL}/rewards`, {
-        params: filters
+        params: filters,
+        timeout: 30000, // ⚡ 30 second timeout
+        headers: {
+          'Cache-Control': 'max-age=3600' // 1 hour cache
+        }
       });
       
       return response.data.data || response.data || [];
@@ -26,19 +30,20 @@ export const rewardService = {
   // Get user's redeemed rewards (requires auth)
   getUserRedemptions: async () => {
     const response = await axios.get(`${API_URL}/user/rewards/redemptions`, {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
+      timeout: 30000 // ⚡ 30 second timeout
     });
     return response.data;
   },
 
   // Redeem a reward
-  redeemReward: async (rewardId, location) => {
+  redeemReward: async (rewardId, destinationId) => {
     const response = await axios.post(
       `${API_URL}/user/rewards/${rewardId}/redeem`,
       {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        destination_id: location.destination_id
+        latitude: 0, // ⚡ Location not required anymore
+        longitude: 0,
+        destination_id: destinationId
       },
       {
         headers: getAuthHeaders()
@@ -48,14 +53,14 @@ export const rewardService = {
   },
 
   // Change/swap a redeemed reward
-  changeReward: async (redemptionId, newRewardId, location) => {
+  changeReward: async (redemptionId, newRewardId, destinationId) => {
     const response = await axios.post(
       `${API_URL}/user/rewards/redemptions/${redemptionId}/change`,
       {
         new_reward_id: newRewardId,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        destination_id: location.destination_id
+        latitude: 0, // ⚡ Location not required anymore
+        longitude: 0,
+        destination_id: destinationId
       },
       {
         headers: getAuthHeaders()

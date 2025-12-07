@@ -28,7 +28,7 @@ class RewardController extends Controller
         
         $rewards = Cache::remember($cacheKey, 300, function () use ($filters) {
             // ⚡ Load full category (no select) - DestinationCategoryResource transforms it
-            $query = Reward::with(['category', 'destinations:destination_id,name']);
+            $query = Reward::with(['category', 'destinations', 'creator']);
 
             // Apply filters using indexed columns
             if (!empty($filters['search'])) {
@@ -61,6 +61,7 @@ class RewardController extends Controller
     public function store(StoreRewardRequest $request): JsonResponse
     {
         $data = $request->validated();
+        $data['created_by'] = auth()->id();
         
         $reward = Reward::create($data);
         
@@ -69,7 +70,7 @@ class RewardController extends Controller
             $reward->destinations()->sync($request->input('destination_ids', []));
         }
         
-        $reward->load(['category', 'destinations']);
+        $reward->load(['category', 'destinations', 'creator']);
 
         // Clear cache (removed tags - not supported by file driver)
         $this->clearRewardCache();
@@ -86,7 +87,7 @@ class RewardController extends Controller
     public function show(Reward $reward)
     {
         $cachedReward = Cache::remember("reward.{$reward->id}", 1800, function () use ($reward) {
-            return $reward->load(['category', 'destinations']);
+            return $reward->load(['category', 'destinations', 'creator']);
         });
 
         return new RewardResource($cachedReward);
@@ -97,6 +98,23 @@ class RewardController extends Controller
      */
     public function update(UpdateRewardRequest $request, Reward $reward): JsonResponse
     {
+        // Authorization logic:
+        // - Admin (role_id=1) can edit rewards created by admin or owner
+        // - Owner (role_id=8) can ONLY edit rewards they created themselves
+        $user = $request->user();
+        $isAdmin = $user->role_id === 1;
+        $creatorIsAdmin = $reward->creator && $reward->creator->role_id === 1;
+        
+        // If reward was created by admin, only admin can edit
+        if ($creatorIsAdmin && !$isAdmin) {
+            return $this->errorResponse('🚫 You don\'t have permission to edit this reward', 403);
+        }
+        
+        // If reward was created by owner, admin or the owner who created it can edit
+        if (!$creatorIsAdmin && !$isAdmin && $reward->created_by !== $user->id) {
+            return $this->errorResponse('🚫 You don\'t have permission to edit this reward', 403);
+        }
+
         Log::info('🔵 Update reward called', [
             'reward_id' => $reward->id,
             'user_id' => $request->user()?->id,
@@ -113,7 +131,7 @@ class RewardController extends Controller
             $reward->destinations()->sync($request->input('destination_ids', []));
         }
         
-        $reward->load(['category', 'destinations']);
+        $reward->load(['category', 'destinations', 'creator']);
 
         // Clear cache
         Cache::forget("reward.{$reward->id}");
@@ -130,6 +148,23 @@ class RewardController extends Controller
      */
     public function destroy(Reward $reward): JsonResponse
     {
+        // Authorization logic:
+        // - Admin (role_id=1) can delete rewards created by admin or owner
+        // - Owner (role_id=8) can ONLY delete rewards they created themselves
+        $user = auth()->user();
+        $isAdmin = $user->role_id === 1;
+        $creatorIsAdmin = $reward->creator && $reward->creator->role_id === 1;
+        
+        // If reward was created by admin, only admin can delete
+        if ($creatorIsAdmin && !$isAdmin) {
+            return $this->errorResponse('🚫 You don\'t have permission to delete this reward', 403);
+        }
+        
+        // If reward was created by owner, admin or the owner who created it can delete
+        if (!$creatorIsAdmin && !$isAdmin && $reward->created_by !== $user->id) {
+            return $this->errorResponse('🚫 You don\'t have permission to delete this reward', 403);
+        }
+
         $reward->delete();
 
         // Clear cache
@@ -163,5 +198,53 @@ class RewardController extends Controller
             $cacheKey = 'rewards.' . md5(json_encode($filters));
             Cache::forget($cacheKey);
         }
+    }
+
+    /**
+     * Add stock to a reward.
+     */
+    public function addStock(Request $request, Reward $reward): JsonResponse
+    {
+        // Authorization logic:
+        // - Admin (role_id=1) can add stock to rewards created by admin or owner
+        // - Owner (role_id=8) can ONLY add stock to rewards they created themselves
+        $user = auth()->user();
+        $isAdmin = $user->role_id === 1;
+        $creatorIsAdmin = $reward->creator && $reward->creator->role_id === 1;
+        
+        // If reward was created by admin, only admin can add stock
+        if ($creatorIsAdmin && !$isAdmin) {
+            return $this->errorResponse('🚫 You don\'t have permission to add stock to this reward', 403);
+        }
+        
+        // If reward was created by owner, admin or the owner who created it can add stock
+        if (!$creatorIsAdmin && !$isAdmin && $reward->created_by !== $user->id) {
+            return $this->errorResponse('🚫 You don\'t have permission to add stock to this reward', 403);
+        }
+
+        $validated = $request->validate([
+            'quantity' => 'required|integer|min:1'
+        ]);
+
+        $quantity = $validated['quantity'];
+        // Just add the quantity to stock_quantity (per destination)
+        // Frontend will multiply by destination count for display
+        $currentStock = $reward->stock_quantity ?? 0;
+        $newStock = $currentStock + $quantity;
+
+        $reward->update([
+            'stock_quantity' => $newStock
+        ]);
+
+        $reward->load(['category', 'destinations']);
+        $this->clearRewardCache();
+
+        $destinationCount = $reward->destinations()->count() ?? 1;
+        $totalDisplay = $newStock * $destinationCount;
+
+        return $this->successResponse(
+            new RewardResource($reward),
+            "Stock added successfully! Added $quantity per destination (= $quantity × $destinationCount = " . ($quantity * $destinationCount) . " total). New quantity per destination: $newStock (Total: $totalDisplay)"
+        );
     }
 }

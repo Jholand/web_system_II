@@ -52,6 +52,7 @@ Route::get('rewards/{reward}', [App\Http\Controllers\RewardController::class, 's
 
 // Destination Images API Routes
 Route::post('destination-images', [App\Http\Controllers\DestinationImageController::class, 'store']);
+Route::put('destination-images/{id}', [App\Http\Controllers\DestinationImageController::class, 'update']);
 Route::delete('destination-images/{id}', [App\Http\Controllers\DestinationImageController::class, 'destroy']);
 
 // Check-in API Routes (Protected - Authenticated Users)
@@ -100,10 +101,26 @@ Route::middleware(['auth:sanctum', 'active', 'admin'])->group(function () {
     Route::post('rewards', [App\Http\Controllers\RewardController::class, 'store']);
     Route::put('rewards/{reward}', [App\Http\Controllers\RewardController::class, 'update']);
     Route::delete('rewards/{reward}', [App\Http\Controllers\RewardController::class, 'destroy']);
+    Route::post('rewards/{reward}/add-stock', [App\Http\Controllers\RewardController::class, 'addStock']);
     
     Route::get('reward-categories', function () {
         return response()->json(\App\Models\RewardCategory::all());
     });
+});
+
+// Owner Dashboard API Routes (Protected - Owner Only + Active Status)
+Route::prefix('owner')->middleware(['auth:sanctum', 'active', 'owner'])->group(function () {
+    Route::get('dashboard', [App\Http\Controllers\OwnerDashboardController::class, 'index']);
+    Route::get('destinations', [App\Http\Controllers\OwnerDashboardController::class, 'destinations']);
+    Route::get('redemptions', [App\Http\Controllers\OwnerDashboardController::class, 'redemptions']);
+    Route::get('redemptions/code/{code}', [App\Http\Controllers\OwnerDashboardController::class, 'getRedemptionByCode']);
+    Route::post('redemptions/claim/{code}', [App\Http\Controllers\OwnerDashboardController::class, 'claimRedemption']);
+    
+    // Owner Rewards Management
+    Route::get('rewards', [App\Http\Controllers\OwnerDashboardController::class, 'getRewards']);
+    Route::post('rewards', [App\Http\Controllers\OwnerDashboardController::class, 'storeReward']);
+    Route::put('rewards/{id}', [App\Http\Controllers\OwnerDashboardController::class, 'updateReward']);
+    Route::delete('rewards/{id}', [App\Http\Controllers\OwnerDashboardController::class, 'destroyReward']);
 });
 
 // Admin Users API Routes (Protected - Admin Only + Active Status)
@@ -119,3 +136,4 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'active', 'admin'])->group(f
     Route::put('users/{user}', [UserController::class, 'update']);
     Route::delete('users/{user}', [UserController::class, 'destroy']);
 });
+

@@ -15,13 +15,8 @@ class DestinationCategoryResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        // Check if icon is a file path or emoji
+        // Return icon as-is (path or emoji), let frontend handle URL generation
         $iconValue = $this->icon ?? '🏨';
-        if (str_starts_with($iconValue, 'category-icons/')) {
-            /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-            $disk = Storage::disk('public');
-            $iconValue = $disk->url($iconValue);
-        }
 
         return [
             'id' => $this->category_id,

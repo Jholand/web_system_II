@@ -33,7 +33,7 @@ const Pagination = ({
   const endItem = Math.min(currentPage * itemsPerPage, totalItems);
 
   return (
-    <div className="bg-white border-t border-slate-200 px-4 py-4 rounded-b-xl">
+    <div className="bg-white border-t border-slate-200 px-4 py-4 rounded-b-xl relative z-10">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
         {/* Items per page and showing info */}
         <div className="flex items-center gap-4 text-xs">
@@ -61,12 +61,13 @@ const Pagination = ({
         <div className="flex items-center gap-2">
           {/* Previous button */}
           <button
+            type="button"
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
             className={`px-2 py-1.5 rounded-lg transition-all ${
               currentPage === 1
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                : 'bg-white border border-slate-300 text-slate-700 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-600'
+                : 'bg-white border border-slate-300 text-slate-700 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-600 cursor-pointer'
             }`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -80,12 +81,13 @@ const Pagination = ({
               key={index}
               onClick={() => typeof page === 'number' && onPageChange(page)}
               disabled={page === '...'}
-              className={`min-w-[32px] px-2 py-1.5 rounded-lg text-xs transition-all ${
+              type="button"
+              className={`min-w-[32px] px-2 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
                 page === currentPage
                   ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-sm'
                   : page === '...'
-                  ? 'bg-transparent text-slate-400 cursor-default'
-                  : 'bg-white border border-slate-300 text-slate-700 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-600'
+                  ? 'bg-transparent text-slate-400 cursor-default pointer-events-none'
+                  : 'bg-white border border-slate-300 text-slate-700 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-600 cursor-pointer'
               }`}
             >
               {page}
@@ -94,12 +96,13 @@ const Pagination = ({
 
           {/* Next button */}
           <button
+            type="button"
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
             className={`px-2 py-1.5 rounded-lg transition-all ${
               currentPage === totalPages
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                : 'bg-white border border-slate-300 text-slate-700 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-600'
+                : 'bg-white border border-slate-300 text-slate-700 hover:bg-teal-50 hover:border-teal-300 hover:text-teal-600 cursor-pointer'
             }`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

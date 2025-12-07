@@ -1,23 +1,23 @@
 import { QueryClient } from '@tanstack/react-query';
 
-// ⚡ INSTANT LOAD React Query Configuration
-// Like TikTok/Facebook - shows cached data INSTANTLY while refetching in background
+// ⚡ BALANCED SPEED + DATA React Query Configuration
+// Fast loading with automatic data fetching when needed
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // ⚡ INSTANT + ALWAYS FRESH - Best of both worlds
-      staleTime: 0, // ALWAYS fetch fresh data
-      gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+      // ⚡ SMART CACHING: 30 min cache, auto-refetch when stale
+      staleTime: 30 * 60 * 1000, // ⚡ 30 MIN - balanced performance
+      gcTime: 120 * 60 * 1000, // 2 HOUR cache retention
       
-      // ⚡ PERFORMANCE: Smart refetching
-      refetchOnWindowFocus: true, // ✅ Refresh when user returns (get latest data)
-      refetchOnReconnect: true, // ✅ Refetch when internet reconnects
-      refetchOnMount: true, // ✅ ALWAYS get fresh data on mount
+      // ✅ SMART: Always show data, fetch when needed!
+      refetchOnWindowFocus: false, // No refetch on tab switch
+      refetchOnReconnect: false, // No refetch on reconnect
+      refetchOnMount: true, // ✅ YES - fetch fresh data on mount
       refetchInterval: false, // No automatic polling
       
-      // ✅ PERFORMANCE: Retry failed requests
-      retry: 1, // Only retry once
-      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      // ✅ PERFORMANCE: Retry on failure
+      retry: 2, // Retry twice
+      retryDelay: 1000, // 1 second delay
       
       // ✅ UX: Keep showing old data while fetching new data
       placeholderData: (previousData) => previousData,

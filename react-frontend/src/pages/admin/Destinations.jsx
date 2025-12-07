@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Plus, ChevronDown, User, X, Clock } from 'lucide-react';
 import axios from 'axios';
 import { QRCodeSVG } from 'qrcode.react';
+import { staggerContainer, slideInFromRight } from '../../utils/animations';
 import AdminHeader from '../../components/common/AdminHeader';
 import toast from 'react-hot-toast';
 import DashboardTabs from '../../components/dashboard/DashboardTabs';
@@ -14,14 +16,17 @@ import ToastNotification from '../../components/common/ToastNotification';
 import SearchFilter from '../../components/common/SearchFilter';
 import Pagination from '../../components/common/Pagination';
 import FetchingIndicator from '../../components/common/FetchingIndicator';
-import { DestinationSkeletonGrid } from '../../components/common/DestinationSkeleton';
+import SkeletonLoader from '../../components/common/SkeletonLoader';
+import AddButton from '../../components/common/AddButton';
+import AnimatedCard from '../../components/common/AnimatedCard';
+import ViewToggle from '../../components/common/ViewToggle';
 
 // Auto-detect API URL based on hostname for mobile access
 const getApiUrl = () => {
   const hostname = window.location.hostname;
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    // Check if using Laragon Apache or artisan serve
-    return 'http://localhost/web_system_II/laravel-backend/public/api';
+    // Use artisan serve (port 8000)
+    return 'http://localhost:8000/api';
   }
   return `http://${hostname}:8000/api`;
 };
@@ -29,7 +34,7 @@ const getApiUrl = () => {
 const getBaseUrl = () => {
   const hostname = window.location.hostname;
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost/web_system_II/laravel-backend/public';
+    return 'http://localhost:8000';
   }
   return `http://${hostname}:8000`;
 };
@@ -77,6 +82,23 @@ const Destinations = () => {
   });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Helper function to check if icon is an image path
+  const isImagePath = (icon) => {
+    if (!icon) return false;
+    return icon.includes('/') || icon.includes('\\') || 
+           icon.endsWith('.jpg') || icon.endsWith('.jpeg') || 
+           icon.endsWith('.png') || icon.endsWith('.gif') || 
+           icon.endsWith('.webp');
+  };
+
+  // Helper function to get full image URL
+  const getIconUrl = (icon) => {
+    if (isImagePath(icon)) {
+      return `${BASE_URL}/storage/${icon}`;
+    }
+    return icon; // Return emoji as is
+  };
   
   // Pagination and filter states
   const [currentPage, setCurrentPage] = useState(1);
@@ -87,9 +109,19 @@ const Destinations = () => {
   // Data states
   const [destinations, setDestinations] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [owners, setOwners] = useState([]);
   const [totalDestinations, setTotalDestinations] = useState(0);
-  const [initialLoading, setInitialLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [ownerDropdownOpen, setOwnerDropdownOpen] = useState(false);
+  const hasMounted = useRef(false);
+  const fetchIdRef = useRef(0); // Track fetch requests to prevent race conditions
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('destinations_view_mode') || 'card';
+  });
+  const categoryDropdownRef = useRef(null);
+  const ownerDropdownRef = useRef(null);
 
   // Form state for add/edit
   const [formData, setFormData] = useState({
@@ -113,6 +145,7 @@ const Destinations = () => {
     featured: false,
     qrCode: '',
     qrCodeImageUrl: '',
+    owner: null, // Owner ID for the destination
   });
 
   // Images state
@@ -163,6 +196,7 @@ const Destinations = () => {
       } catch (e) {}
     }
     fetchCategories();
+    fetchOwners(); // Fetch owners list
   }, []);
 
   // Check for new destination from map
@@ -198,77 +232,207 @@ const Destinations = () => {
     }
   }, []);
 
+  // Refetch categories when component mounts (catches new categories added)
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  // Close category dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+        setCategoryDropdownOpen(false);
+      }
+      if (ownerDropdownRef.current && !ownerDropdownRef.current.contains(event.target)) {
+        setOwnerDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const fetchCategories = async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/categories`, {
         params: { per_page: 100 }
       });
       const data = response.data.data || [];
-      setCategories(data.map(cat => ({
-        id: cat.id,
-        value: cat.id,
-        label: `${cat.icon} ${cat.name}`,
-        name: cat.name,
-        icon: cat.icon
-      })));
+      setCategories(data.map(cat => {
+        // Check if icon is an image path or emoji
+        const isImageIcon = cat.icon && (cat.icon.includes('/') || cat.icon.includes('\\'));
+        const displayIcon = isImageIcon ? '🖼️' : cat.icon; // Use picture frame emoji for image icons
+        return {
+          id: cat.id,
+          value: cat.id,
+          label: `${displayIcon} ${cat.name}`,
+          name: cat.name,
+          icon: cat.icon,
+          iconUrl: isImageIcon ? `http://localhost:8000/storage/${cat.icon}` : null
+        };
+      }));
     } catch (error) {
       console.error('Error fetching categories:', error);
       toast.error('Failed to load categories');
     }
   };
 
+  const fetchOwners = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/admin/users`, {
+        params: { role: 'owner', per_page: 1000 }
+      });
+      const data = response.data.data || [];
+      console.log('Fetched owners:', data);
+      console.log('Total owners found:', data.length);
+      setOwners(data.map(owner => ({
+        id: owner.id,
+        value: owner.id,
+        label: `${owner.first_name} ${owner.last_name}`,
+        email: owner.email,
+        username: owner.username
+      })));
+    } catch (error) {
+      console.error('Error fetching owners:', error);
+      toast.error('Failed to load owners');
+    }
+  };
+
   // Standalone fetch function for manual refresh
-  const fetchDestinations = async () => {
+  const fetchDestinations = async (page, perPage, search, category) => {
+    const currentFetchId = ++fetchIdRef.current;
+    
     try {
       setIsFetching(true);
       const response = await axios.get(`${API_BASE_URL}/destinations`, {
         params: {
-          page: currentPage,
-          per_page: itemsPerPage,
-          search: searchQuery || undefined,
-          category_id: selectedCategory !== 'all' ? selectedCategory : undefined,
+          page: page,
+          per_page: perPage,
+          search: search || undefined,
+          category_id: category !== 'all' ? category : undefined,
+          _t: Date.now(),
         },
       });
+
+      // Only update state if this is still the latest fetch
+      if (currentFetchId !== fetchIdRef.current) return;
 
       const data = response.data.data || [];
       const meta = response.data.meta || {};
 
       // Transform API data to match component structure
-      const transformedDestinations = data.map(dest => ({
-        id: dest.id,
-        title: dest.name,
-        name: dest.name,
-        category: dest.category.name,
-        categoryColor: 'bg-teal-100 text-teal-700',
-        categoryIcon: dest.category.icon,
-        description: dest.description || '',
-        points: dest.points_reward,
-        city: dest.address?.city || dest.city || '',
-        province: dest.address?.province || dest.province || '',
-        street: dest.address?.street || dest.street_address || '',
-        barangay: dest.address?.barangay || dest.barangay || '',
-        location: `${dest.address?.city || dest.city || ''}, ${dest.address?.province || dest.province || ''}`,
-        rating: dest.stats?.average_rating || dest.average_rating || 0,
-        latitude: dest.coordinates?.latitude || dest.latitude,
-        longitude: dest.coordinates?.longitude || dest.longitude,
-        visitors: dest.stats?.total_visits || dest.total_visits || 0,
-        image_url: dest.images && dest.images.length > 0 ? dest.images.find(img => img.is_primary)?.image_path || dest.images[0]?.image_path : null,
-        // Store full data for editing
-        fullData: dest
-      }));
+      const transformedDestinations = data.map(dest => {
+        let selectedImage = null;
+        if (dest.images && dest.images.length > 0) {
+          // Find primary image
+          const primaryImage = dest.images.find(img => 
+            img.is_primary === true || 
+            img.is_primary === 1 || 
+            img.is_primary === '1'
+          );
+          
+          selectedImage = primaryImage || dest.images[0];
+        }
+        
+        const result = {
+          id: dest.id,
+          title: dest.name,
+          name: dest.name,
+          category: dest.category.name,
+          categoryColor: 'bg-teal-100 text-teal-700',
+          categoryIcon: isImagePath(dest.category.icon) ? '🖼️' : dest.category.icon,
+          categoryIconUrl: isImagePath(dest.category.icon) ? getIconUrl(dest.category.icon) : null,
+          description: dest.description || '',
+          points: dest.points_reward,
+          city: dest.address?.city || dest.city || '',
+          province: dest.address?.province || dest.province || '',
+          street: dest.address?.street || dest.street_address || '',
+          barangay: dest.address?.barangay || dest.barangay || '',
+          location: `${dest.address?.city || dest.city || ''}, ${dest.address?.province || dest.province || ''}`,
+          rating: dest.stats?.average_rating || dest.average_rating || 0,
+          latitude: dest.coordinates?.latitude || dest.latitude,
+          longitude: dest.coordinates?.longitude || dest.longitude,
+          visitors: dest.stats?.total_visits || dest.total_visits || 0,
+          image_url: selectedImage?.image_path || null,
+          owner_id: dest.owner_id || null,
+          owner_name: dest.owner?.name || null,
+          fullData: dest
+        };
 
-      setDestinations(transformedDestinations);
+        return result;
+      });
+
+      setDestinations([...transformedDestinations]);
       setTotalDestinations(meta.total || data.length);
+      
+      // Cache first page results
+      if (page === 1 && !search && category === 'all') {
+        localStorage.setItem('cached_destinations', JSON.stringify({
+          data: transformedDestinations,
+          total: meta.total || data.length,
+          timestamp: Date.now(),
+        }));
+      }
     } catch (error) {
+      if (currentFetchId !== fetchIdRef.current) return;
       console.error('Error fetching destinations:', error);
+      if (error.response?.status === 401) {
+        toast.error('Session expired');
+        navigate('/');
+      }
     } finally {
-      setIsFetching(false);
+      if (currentFetchId === fetchIdRef.current) {
+        setIsFetching(false);
+      }
     }
   };
 
+  // Initial load with instant cache
+  useEffect(() => {
+    const loadInitialData = async () => {
+      const cached = localStorage.getItem('cached_destinations');
+      
+      // Only use cache for initial page 1 with no filters
+      if (cached && currentPage === 1 && !searchQuery && selectedCategory === 'all') {
+        try {
+          const { data, total, timestamp } = JSON.parse(cached);
+          const cacheAge = Date.now() - timestamp;
+          
+          // Show cached data instantly if valid (less than 5 min old)
+          if (data && data.length > 0 && cacheAge < 300000) {
+            setDestinations(data);
+            setTotalDestinations(total || 0);
+            setInitialLoading(false);
+            hasMounted.current = true;
+            console.log('⚡ Loaded destinations from cache');
+            fetchCategories();
+            fetchOwners();
+            return;
+          }
+        } catch (e) {
+          console.error('Cache parse error:', e);
+        }
+      }
+      
+      // Fetch fresh data
+      setIsFetching(true);
+      await fetchDestinations(currentPage, itemsPerPage, searchQuery, selectedCategory);
+      setIsFetching(false);
+      hasMounted.current = true;
+      fetchCategories();
+      fetchOwners();
+    };
+    
+    loadInitialData();
+  }, []);
+
   // Fetch destinations when pagination/filters change
   useEffect(() => {
-    fetchDestinations();
+    if (!hasMounted.current) return;
+    
+    console.log('🔄 Pagination/filter change:', { currentPage, itemsPerPage, searchQuery, selectedCategory });
+    setIsFetching(true);
+    fetchDestinations(currentPage, itemsPerPage, searchQuery, selectedCategory)
+      .finally(() => setIsFetching(false));
   }, [currentPage, itemsPerPage, searchQuery, selectedCategory]);
 
   // API handles filtering and pagination
@@ -323,6 +487,7 @@ const Destinations = () => {
         featured: fullData.is_featured || false,
         qrCode: fullData.qr_code || '',
         qrCodeImageUrl: fullData.qr_code_image_url || '',
+        owner: fullData.owner_id || null,
         destination_id: fullData.id || data.id || null,
       });
       // Set images if available
@@ -342,7 +507,8 @@ const Destinations = () => {
             preview: imageUrl,
             title: img.title,
             file: null,
-            isPrimary: index === actualPrimaryIndex,
+            isPrimary: img.is_primary === 1 || img.is_primary === true || index === actualPrimaryIndex,
+            is_primary: img.is_primary === 1 || img.is_primary === true || index === actualPrimaryIndex ? 1 : 0,
             isExisting: true
           };
         }));
@@ -399,6 +565,7 @@ const Destinations = () => {
         featured: false,
         qrCode: '',
         qrCodeImageUrl: '',
+        owner: null,
         destination_id: null,
       });
       setImages([]);
@@ -515,6 +682,7 @@ const Destinations = () => {
         website: formData.website || null,
         qr_code: formData.qrCode || null,
         qr_code_image_url: formData.qrCodeImageUrl || null,
+        owner_id: formData.owner || null,
         amenities: selectedAmenities.map(a => ({
           name: typeof a === 'object' ? a.name : a,
           icon: typeof a === 'object' ? a.icon : '✨'
@@ -556,6 +724,31 @@ const Destinations = () => {
         const response = await axios.put(`${API_BASE_URL}/destinations/${destinationId}`, destinationData, { headers });
         const updatedDest = response.data.data;
         
+        // Update primary status for existing images
+        const existingImages = images.filter(img => img.isExisting && img.id);
+        console.log('Updating primary images. Primary index:', primaryImageIndex);
+        console.log('All images:', images);
+        console.log('Existing images to update:', existingImages);
+        
+        if (existingImages.length > 0) {
+          for (const image of existingImages) {
+            const imageIndex = images.indexOf(image);
+            const shouldBePrimary = imageIndex === primaryImageIndex;
+            console.log(`Image ${image.id}: index=${imageIndex}, shouldBePrimary=${shouldBePrimary}`);
+            
+            try {
+              await axios.put(`${API_BASE_URL}/destination-images/${image.id}`, {
+                is_primary: shouldBePrimary ? 1 : 0,
+                title: image.title
+              }, { headers });
+              console.log(`Successfully updated image ${image.id} with is_primary=${shouldBePrimary ? 1 : 0}`);
+            } catch (imgError) {
+              console.error('Error updating image primary status:', imgError);
+              console.error('Error details:', imgError.response?.data);
+            }
+          }
+        }
+        
         // Upload new images if any
         const uploadedImages = [];
         const newImagesToUpload = images.filter(img => img.file);
@@ -565,7 +758,7 @@ const Destinations = () => {
             imageFormData.append('image', image.file);
             imageFormData.append('destination_id', destinationId);
             imageFormData.append('title', image.caption || image.file.name);
-            imageFormData.append('is_primary', image.isPrimary || images.indexOf(image) === primaryImageIndex ? '1' : '0');
+            imageFormData.append('is_primary', images.indexOf(image) === primaryImageIndex ? '1' : '0');
             
             try {
               const imgResponse = await axios.post(`${API_BASE_URL}/destination-images`, imageFormData, {
@@ -582,7 +775,7 @@ const Destinations = () => {
         closeModal();
         toast.success('Destination updated successfully!');
         // Refresh data in real-time
-        await fetchDestinations();
+        await fetchDestinations(currentPage, itemsPerPage, searchQuery, selectedCategory);
       } else {
         const response = await axios.post(`${API_BASE_URL}/destinations`, destinationData, { headers });
         const newDestination = response.data.data;
@@ -616,7 +809,7 @@ const Destinations = () => {
         toast.success('Destination added successfully!');
         setTotalDestinations(prev => prev + 1);
         // Refresh data in real-time
-        await fetchDestinations();
+        await fetchDestinations(currentPage, itemsPerPage, searchQuery, selectedCategory);
       }
     } catch (error) {
       console.error('Error saving destination:', error);
@@ -746,7 +939,9 @@ const Destinations = () => {
       id: Date.now() + index,
       url: URL.createObjectURL(file),
       caption: file.name,
-      file: file
+      file: file,
+      isPrimary: false,
+      is_primary: 0
     }));
     setImages(prev => [...prev, ...newImages]);
     toast.success(`${files.length} image(s) uploaded successfully`);
@@ -780,7 +975,8 @@ const Destinations = () => {
     // Update images array to reflect only one primary
     setImages(prev => prev.map((img, idx) => ({
       ...img,
-      isPrimary: idx === index
+      isPrimary: idx === index,
+      is_primary: idx === index ? 1 : 0  // Add database field
     })));
     toast.success('Primary image updated');
   };
@@ -1044,6 +1240,36 @@ const Destinations = () => {
     }
   };
 
+  const handleFetchPostalCode = async () => {
+    if (!formData.city || !formData.province) {
+      toast.error('Please enter City and Province first');
+      return;
+    }
+
+    const toastId = toast.loading('📮 Fetching postal code...');
+    
+    try {
+      const response = await axios.post(`${API_BASE_URL}/address/postal-code`, {
+        city: formData.city,
+        province: formData.province
+      });
+      
+      if (response.data.success && response.data.data) {
+        const postalCode = response.data.data.postal_code;
+        setFormData(prev => ({
+          ...prev,
+          postalCode: postalCode
+        }));
+        toast.success(`📮 Postal Code: ${postalCode}`, { id: toastId });
+      } else {
+        toast.error('Postal code not found for this location', { id: toastId });
+      }
+    } catch (error) {
+      console.error('Error fetching postal code:', error);
+      toast.error('Failed to fetch postal code', { id: toastId });
+    }
+  };
+
   const sections = [
     { id: 'basic', label: 'Basic Info', icon: '📝' },
     { id: 'location', label: 'Location', icon: '📍' },
@@ -1067,83 +1293,191 @@ const Destinations = () => {
         : data.image_url;
       
       return (
-        <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2 scrollbar-hide">
-          {/* Featured Image */}
-          {imageUrl && (
-            <div className="relative -mx-6 -mt-6 mb-6">
-              <img
-                src={imageUrl}
-                alt={data.title}
-                className="w-full h-56 object-contain bg-slate-100"
-              />
-              <div className="absolute top-4 right-4 bg-teal-500 text-white px-3 py-1.5 rounded-lg font-bold shadow-lg">
-                +{data.points} pts
+        <div className="space-y-6 pr-1 max-w-7xl mx-auto">
+          <div className="grid xl:grid-cols-[1.8fr_1fr] gap-5 items-start">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              {imageUrl && (
+                <div className="relative h-64 bg-slate-100">
+                  <img
+                    src={imageUrl}
+                    alt={data.title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-4 right-4 bg-teal-500 text-white px-3 py-1.5 rounded-lg font-bold shadow-lg">
+                    +{data.points} pts
+                  </div>
+                  <div className="absolute bottom-4 left-4">
+                    <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${data.categoryColor} shadow-lg`}>
+                      {data.categoryIconUrl ? (
+                        <img src={data.categoryIconUrl} alt={data.category} className="w-5 h-5 rounded object-cover" />
+                      ) : (
+                        <span>{data.categoryIcon}</span>
+                      )}
+                      <span>{data.category}</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-14 h-14 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-2xl flex items-center justify-center shadow-lg">
+                    {data.categoryIconUrl ? (
+                      <img src={data.categoryIconUrl} alt={data.category} className="w-10 h-10 rounded-xl object-cover" />
+                    ) : (
+                      <span className="text-3xl text-white">{data.categoryIcon}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-2xl font-bold text-slate-900 leading-snug">{data.title}</h2>
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${data.categoryColor}`}>
+                        {data.categoryIconUrl ? (
+                          <img src={data.categoryIconUrl} alt={data.category} className="w-4 h-4 rounded object-cover" />
+                        ) : (
+                          <span>{data.categoryIcon}</span>
+                        )}
+                        <span>{data.category}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                        <span className="text-sm">●</span> {fullData.status || 'active'}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                        ⭐ {data.rating || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="absolute bottom-4 left-4">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${data.categoryColor} shadow-lg`}>
-                  <span>{data.categoryIcon}</span>
-                  <span>{data.category}</span>
-                </span>
+            </div>
+
+            {fullData.qr_code && (
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-4 border-2 border-purple-200 shadow-lg w-full">
+                <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 mb-3">
+                  <span className="text-xl">📱</span>
+                  <span>QR Code</span>
+                </h3>
+                <div className="flex flex-col items-center space-y-3">
+                  <div id={`view-qr-code-container-${data.id}`} className="bg-white p-4 rounded-lg shadow-md">
+                    <QRCodeSVG 
+                      value={fullData.qr_code}
+                      size={180}
+                      level="H"
+                      includeMargin={true}
+                    />
+                  </div>
+                  <div className="w-full">
+                    <p className="text-xs font-semibold text-center text-slate-700 mb-1">QR Code Value:</p>
+                    <div className="bg-white px-3 py-2 rounded-lg border-2 border-purple-300 shadow-sm">
+                      <code className="block text-center text-purple-600 font-mono text-xs font-medium break-all">{fullData.qr_code}</code>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        const qrContainer = document.getElementById(`view-qr-code-container-${data.id}`);
+                        const svg = qrContainer?.querySelector('svg');
+                        if (!svg) {
+                          toast.error('QR Code not found');
+                          return;
+                        }
+
+                        const canvas = document.createElement('canvas');
+                        const svgData = new XMLSerializer().serializeToString(svg);
+                        const img = new Image();
+                        const destinationName = data.title || 'destination';
+                        const qrCodeValue = fullData.qr_code || 'code';
+
+                        img.onload = () => {
+                          const padding = 12;
+                          const textArea = 64;
+                          canvas.width = img.width + padding * 2;
+                          canvas.height = img.height + textArea + padding * 2;
+                          const ctx = canvas.getContext('2d');
+
+                          ctx.fillStyle = '#ffffff';
+                          ctx.fillRect(0, 0, canvas.width, canvas.height);
+                          ctx.drawImage(img, padding, padding);
+
+                          ctx.fillStyle = '#0f172a';
+                          ctx.font = '600 16px "Inter", system-ui, sans-serif';
+                          ctx.textAlign = 'center';
+                          ctx.fillText(destinationName, canvas.width / 2, img.height + padding + 24);
+                          ctx.font = '500 14px "Inter", system-ui, sans-serif';
+                          ctx.fillStyle = '#475569';
+                          ctx.fillText(`QR: ${qrCodeValue}`, canvas.width / 2, img.height + padding + 46);
+
+                          const safeName = destinationName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+                          const safeCode = String(qrCodeValue).replace(/[^a-z0-9]/gi, '-').toLowerCase();
+                          const link = document.createElement('a');
+                          link.download = `${safeName}-${safeCode}-qr.png`;
+                          link.href = canvas.toDataURL('image/png');
+                          link.click();
+                          toast.success('QR Code downloaded!');
+                        };
+
+                        img.onerror = () => {
+                          toast.error('Failed to download QR Code');
+                        };
+
+                        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+                      } catch (error) {
+                        console.error('QR download error:', error);
+                        toast.error('Failed to download QR Code');
+                      }
+                    }}
+                    className="px-5 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all shadow-md font-semibold text-sm"
+                  >
+                    📥 Download QR Code
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-          
-          {/* Header */}
-          <div className="flex items-center gap-4 pb-4 border-b border-slate-200">
-            <div className="w-16 h-16 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-2xl flex items-center justify-center text-4xl shadow-lg">
-              {data.categoryIcon}
-            </div>
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold text-slate-900">{data.title}</h2>
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${data.categoryColor} mt-2`}>
-                <span>{data.categoryIcon}</span>
-                <span>{data.category}</span>
-              </span>
-            </div>
+            )}
           </div>
 
           {/* Basic Info Section */}
-          <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-5 border border-slate-200">
-            <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
-              <span className="text-2xl">📝</span>
+          <div className="bg-gradient-to-br from-teal-50/30 to-cyan-50/30 rounded-xl p-4 border-2 border-teal-200 shadow-lg">
+            <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 mb-3">
+              <span className="text-xl">📝</span>
               <span>Basic Information</span>
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Destination Name</label>
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">Destination Name</label>
                 <p className="text-sm font-medium text-slate-900">{data.title}</p>
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Status</label>
-                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${fullData.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">Status</label>
+                <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${fullData.status === 'active' ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-gray-100 text-gray-700 border border-gray-300'}`}>
                   {fullData.status || 'active'}
                 </span>
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Description</label>
-                <p className="text-sm text-slate-900">{data.description}</p>
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">Description</label>
+                <p className="text-sm text-slate-900 leading-relaxed">{data.description}</p>
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Points Reward</label>
-                <p className="text-lg font-bold text-teal-600">{data.points} pts</p>
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">Points Reward</label>
+                <p className="text-base font-bold text-teal-600">{data.points} pts</p>
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Rating</label>
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">Rating</label>
                 <div className="flex items-center gap-1">
-                  <span className="text-yellow-500 text-xl">⭐</span>
-                  <span className="text-lg font-bold text-slate-900">{data.rating}</span>
+                  <span className="text-yellow-500 text-lg">⭐</span>
+                  <span className="text-base font-bold text-slate-900">{data.rating}</span>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Location Section */}
-          <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl p-5 border border-teal-200">
-            <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
-              <span className="text-2xl">📍</span>
+          <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl p-4 border-2 border-teal-200 shadow-lg">
+            <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 mb-3">
+              <span className="text-xl">📍</span>
               <span>Location Details</span>
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <div className="md:col-span-2">
                 <label className="text-xs font-medium text-slate-600 mb-1 block">Street Address</label>
                 <p className="text-sm text-slate-900">{fullData.address?.street || 'N/A'}</p>
@@ -1169,9 +1503,9 @@ const Destinations = () => {
 
           {/* Contact Information Section */}
           {(fullData.contact?.phone || fullData.contact?.email || fullData.contact?.website) && (
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-200">
-              <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
-                <span className="text-2xl">📞</span>
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200 shadow-lg">
+              <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 mb-3">
+                <span className="text-xl">📞</span>
                 <span>Contact Information</span>
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1199,14 +1533,14 @@ const Destinations = () => {
 
           {/* Amenities Section */}
           {fullData.amenities && fullData.amenities.length > 0 && (
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-5 border border-purple-200">
-              <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
-                <span className="text-2xl">✨</span>
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border-2 border-purple-200 shadow-lg">
+              <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 mb-3">
+                <span className="text-xl">✨</span>
                 <span>Amenities</span>
               </h3>
               <div className="flex flex-wrap gap-2">
                 {fullData.amenities.map((amenity, index) => (
-                  <span key={index} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg text-sm font-medium text-slate-700 border border-slate-200">
+                  <span key={index} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg text-sm font-medium text-slate-700 border-2 border-purple-200 shadow-sm">
                     <span>{amenity.icon}</span>
                     <span>{amenity.name}</span>
                   </span>
@@ -1217,14 +1551,14 @@ const Destinations = () => {
 
           {/* Operating Hours Section */}
           {fullData.operating_hours && fullData.operating_hours.length > 0 && (
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-5 border border-amber-200">
-              <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
-                <span className="text-2xl">🕐</span>
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border-2 border-amber-200 shadow-lg">
+              <h3 className="flex items-center gap-2 text-base font-bold text-slate-900 mb-3">
+                <span className="text-xl">🕐</span>
                 <span>Operating Hours</span>
               </h3>
               <div className="space-y-2">
                 {fullData.operating_hours.map((hour, index) => (
-                  <div key={index} className="flex justify-between items-center py-2 px-3 bg-white rounded-lg">
+                  <div key={index} className="flex justify-between items-center py-2 px-3 bg-white rounded-lg shadow-sm border border-amber-200">
                     <span className="text-sm font-medium text-slate-900">{hour.day}</span>
                     <span className="text-sm text-slate-600">
                       {hour.is_closed ? (
@@ -1297,23 +1631,69 @@ const Destinations = () => {
                   className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
                 />
               </div>
-              <div>
+              <div className="relative" ref={categoryDropdownRef}>
                 <label className="block text-xs font-medium text-slate-700 mb-1">
                   Category <span className="text-red-500">*</span>
                 </label>
-                <select
-                  name="category"
-                  value={formData.category}
-                  onChange={handleInputChange}
-                  className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                <div
+                  onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                  className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded hover:border-teal-400 cursor-pointer transition-all flex items-center justify-between"
                 >
-                  <option value="">Select</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.label}
-                    </option>
-                  ))}
-                </select>
+                  <div className="flex items-center gap-2">
+                    {formData.category ? (
+                      <>
+                        {(() => {
+                          const selectedCat = categories.find(c => c.id == formData.category);
+                          if (!selectedCat) return <span className="text-slate-400">Select</span>;
+                          const isImg = isImagePath(selectedCat.icon);
+                          return (
+                            <>
+                              {isImg ? (
+                                <img src={getIconUrl(selectedCat.icon)} alt="" className="w-4 h-4 rounded object-cover" />
+                              ) : (
+                                <span>{selectedCat.icon}</span>
+                              )}
+                              <span>{selectedCat.name}</span>
+                            </>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <span className="text-slate-400">Select</span>
+                    )}
+                  </div>
+                  <ChevronDown size={14} className={`text-slate-400 transition-transform ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
+                </div>
+                
+                {categoryDropdownOpen && (
+                  <div 
+                    className="absolute z-[60] w-full mt-1 bg-white border border-slate-300 rounded shadow-lg max-h-[320px] overflow-y-auto"
+                    style={{scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9'}}
+                    onWheel={(e) => e.stopPropagation()}
+                    onTouchMove={(e) => e.stopPropagation()}
+                  >
+                    {categories.map((cat) => {
+                      const isImg = isImagePath(cat.icon);
+                      return (
+                        <div
+                          key={cat.id}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, category: cat.id }));
+                            setCategoryDropdownOpen(false);
+                          }}
+                          className={`px-2 py-1.5 hover:bg-teal-50 cursor-pointer transition-colors flex items-center gap-2 text-sm ${formData.category == cat.id ? 'bg-teal-100' : ''}`}
+                        >
+                          {isImg ? (
+                            <img src={getIconUrl(cat.icon)} alt={cat.name} className="w-5 h-5 rounded object-cover flex-shrink-0" />
+                          ) : (
+                            <span className="flex-shrink-0">{cat.icon}</span>
+                          )}
+                          <span>{cat.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">Points</label>
@@ -1340,6 +1720,69 @@ const Destinations = () => {
                   </select>
                 </div>
               )}
+              <div className="relative" ref={ownerDropdownRef}>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Owner</label>
+                <div
+                  onClick={() => setOwnerDropdownOpen(!ownerDropdownOpen)}
+                  className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded hover:border-teal-400 cursor-pointer transition-all flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    {formData.owner ? (
+                      <>
+                        {(() => {
+                          const selectedOwner = owners.find(o => o.id == formData.owner);
+                          if (!selectedOwner) return <span className="text-slate-400">None</span>;
+                          return (
+                            <>
+                              <User size={14} className="text-teal-600" />
+                              <span>{selectedOwner.label}</span>
+                            </>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <span className="text-slate-400">None</span>
+                    )}
+                  </div>
+                  <ChevronDown size={14} className={`text-slate-400 transition-transform ${ownerDropdownOpen ? 'rotate-180' : ''}`} />
+                </div>
+                
+                {ownerDropdownOpen && (
+                  <div 
+                    className="absolute z-[60] w-full mt-1 bg-white border border-slate-300 rounded shadow-lg max-h-80 overflow-y-auto"
+                    style={{scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9'}}
+                    onWheel={(e) => e.stopPropagation()}
+                    onTouchMove={(e) => e.stopPropagation()}
+                  >
+                    <div
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, owner: null }));
+                        setOwnerDropdownOpen(false);
+                      }}
+                      className={`px-2 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-center gap-2 text-sm ${!formData.owner ? 'bg-slate-100' : ''}`}
+                    >
+                      <X size={14} className="text-slate-400" />
+                      <span className="text-slate-500">No owner</span>
+                    </div>
+                    {owners.map((owner) => (
+                      <div
+                        key={owner.id}
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, owner: owner.id }));
+                          setOwnerDropdownOpen(false);
+                        }}
+                        className={`px-2 py-1.5 hover:bg-teal-50 cursor-pointer transition-colors flex items-center gap-2 text-sm ${formData.owner == owner.id ? 'bg-teal-100' : ''}`}
+                      >
+                        <User size={14} className="text-teal-600" />
+                        <div className="flex flex-col">
+                          <span className="font-medium">{owner.label}</span>
+                          <span className="text-xs text-slate-500">{owner.email}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="col-span-3">
                 <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
                 <textarea
@@ -1356,99 +1799,132 @@ const Destinations = () => {
 
           {/* Location Section */}
           {activeSection === 'location' && (
-            <div className="grid grid-cols-3 gap-x-3 gap-y-2">
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Street</label>
-                <input
-                  type="text"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  placeholder="Purok 3"
-                  className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                />
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-slate-800">Location Details</h3>
+              
+              {/* GPS Coordinates - Featured */}
+              <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl p-4 border-2 border-teal-200">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-semibold text-slate-900">📍 GPS Coordinates</label>
+                  <button
+                    type="button"
+                    onClick={handleGetCurrentLocation}
+                    className="flex items-center gap-2 px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition-colors text-sm font-medium shadow-md"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    </svg>
+                    Get My Location
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Latitude <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      name="latitude"
+                      value={formData.latitude}
+                      onChange={handleInputChange}
+                      placeholder="12.74255"
+                      className="w-full px-3 py-2 text-sm bg-white text-slate-900 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Longitude <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      name="longitude"
+                      value={formData.longitude}
+                      onChange={handleInputChange}
+                      placeholder="121.48996"
+                      className="w-full px-3 py-2 text-sm bg-white text-slate-900 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Barangay</label>
-                <input
-                  type="text"
-                  name="barangay"
-                  value={formData.barangay}
-                  onChange={handleInputChange}
-                  placeholder="Ipil"
-                  className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">City <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  name="city"
-                  value={formData.city}
-                  onChange={handleInputChange}
-                  placeholder="Bongabong"
-                  className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Province <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  name="province"
-                  value={formData.province}
-                  onChange={handleInputChange}
-                  placeholder="Oriental Mindoro"
-                  className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Region <span className="text-red-500">*</span></label>
-                <select
-                  name="region"
-                  value={formData.region}
-                  onChange={handleInputChange}
-                  className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                >
-                  <option value="">Select Region</option>
-                  <option value="Region IV-A">Region IV-A</option>
-                  <option value="Region IV-B">Region IV-B</option>
-                  <option value="NCR">NCR</option>
-                  <option value="CAR">CAR</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Postal</label>
-                <input
-                  type="text"
-                  name="postalCode"
-                  value={formData.postalCode}
-                  onChange={handleInputChange}
-                  placeholder="5211"
-                  className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                  readOnly
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Latitude <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  name="latitude"
-                  value={formData.latitude}
-                  onChange={handleInputChange}
-                  placeholder="12.74255"
-                  className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Longitude <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  name="longitude"
-                  value={formData.longitude}
-                  onChange={handleInputChange}
-                  placeholder="121.48996"
-                  className="w-full px-2 py-1 text-sm bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
-                />
+
+              {/* Address Fields */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Street</label>
+                  <input
+                    type="text"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleInputChange}
+                    placeholder="Purok 3"
+                    className="w-full px-3 py-2 text-sm bg-white text-slate-900 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Barangay</label>
+                  <input
+                    type="text"
+                    name="barangay"
+                    value={formData.barangay}
+                    onChange={handleInputChange}
+                    placeholder="Ipil"
+                    className="w-full px-3 py-2 text-sm bg-white text-slate-900 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">City <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city}
+                    onChange={handleInputChange}
+                    placeholder="Bongabong"
+                    className="w-full px-3 py-2 text-sm bg-white text-slate-900 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Province <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    name="province"
+                    value={formData.province}
+                    onChange={handleInputChange}
+                    placeholder="Oriental Mindoro"
+                    className="w-full px-3 py-2 text-sm bg-white text-slate-900 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Region <span className="text-red-500">*</span></label>
+                  <select
+                    name="region"
+                    value={formData.region}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 text-sm bg-white text-slate-900 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  >
+                    <option value="">Select Region</option>
+                    <option value="Region IV-A">Region IV-A</option>
+                    <option value="Region IV-B">Region IV-B</option>
+                    <option value="NCR">NCR</option>
+                    <option value="CAR">CAR</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Postal Code</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      name="postalCode"
+                      value={formData.postalCode}
+                      onChange={handleInputChange}
+                      placeholder="5211"
+                      className="flex-1 px-3 py-2 text-sm bg-white text-slate-900 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleFetchPostalCode}
+                      className="px-3 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-xs font-medium"
+                      title="Get postal code"
+                    >
+                      📮
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1487,17 +1963,17 @@ const Destinations = () => {
                         className="w-full h-24 object-cover rounded border border-slate-200"
                       />
                       {index === primaryImageIndex && (
-                        <div className="absolute top-1 left-1 bg-teal-500 text-white px-1.5 py-0.5 rounded text-xs font-bold shadow-md">
-                          1st
+                        <div className="absolute top-1 left-1 bg-teal-500 text-white px-2 py-0.5 rounded text-xs font-bold shadow-md">
+                          Primary
                         </div>
                       )}
                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center gap-1 rounded">
                         {index !== primaryImageIndex && (
                           <button
                             onClick={() => handleSetPrimaryImage(index)}
-                            className="bg-white text-slate-900 px-1.5 py-0.5 rounded text-xs opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shadow-md font-medium"
+                            className="bg-white text-slate-900 px-2 py-1 rounded text-xs opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shadow-md font-medium"
                           >
-                            1st
+                            Set Primary
                           </button>
                         )}
                         <button
@@ -1516,9 +1992,10 @@ const Destinations = () => {
 
           {/* Amenities Section */}
           {activeSection === 'amenities' && (
-            <div className="space-y-3">
-              <h3 className="font-medium text-slate-900">Amenities & Features</h3>
-              <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-2">
+              <h3 className="text-base font-bold text-slate-900">Amenities & Features</h3>
+              <p className="text-xs text-slate-700 mb-2">Select amenities available at this destination</p>
+              <div className="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-6 gap-2">
                 {availableAmenities.map((amenity) => {
                   const isSelected = selectedAmenities.some(a => 
                     (typeof a === 'object' ? a.id : a) === amenity.id || 
@@ -1528,29 +2005,29 @@ const Destinations = () => {
                     <button
                       key={amenity.id}
                       onClick={() => handleAmenityToggle(amenity)}
-                      className={`flex items-center gap-1.5 px-2 py-1.5 rounded border transition-all ${
+                      className={`flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-lg border-2 transition-all duration-200 min-h-[70px] ${
                         isSelected
-                          ? 'border-teal-500 bg-teal-50 text-teal-900'
-                          : 'border-slate-200 bg-white hover:border-slate-300 text-slate-900'
+                          ? 'border-teal-500 bg-gradient-to-br from-teal-50 to-cyan-50 text-teal-900 shadow-lg'
+                          : 'border-slate-300 bg-white hover:border-teal-400 hover:shadow-md text-slate-900'
                       }`}
                     >
-                      <span className="text-base">{amenity.icon}</span>
-                      <span className="text-xs font-medium">{amenity.name}</span>
+                      <span className="text-xl">{amenity.icon}</span>
+                      <span className="text-[10px] font-semibold text-center leading-tight">{amenity.name}</span>
                     </button>
                   );
                 })}
               </div>
 
               {/* Custom Amenity Input */}
-              <div className="border-t-2 border-slate-200 pt-4">
-                <h4 className="text-sm font-medium text-slate-900 mb-3">Add Custom Amenity</h4>
+              <div className="border-t-2 border-slate-300 pt-2 mt-2">
+                <h4 className="text-xs font-bold text-slate-900 mb-2">Add Custom Amenity</h4>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={customAmenity.icon}
                     onChange={(e) => setCustomAmenity(prev => ({ ...prev, icon: e.target.value }))}
                     placeholder="✨"
-                    className="w-16 px-3 py-2 bg-white text-slate-900 border-2 border-slate-200 rounded-lg text-center"
+                    className="w-14 px-2 py-1.5 bg-white text-slate-900 border-2 border-slate-300 rounded-lg text-center text-sm font-medium focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none"
                     maxLength="2"
                   />
                   <input
@@ -1559,11 +2036,11 @@ const Destinations = () => {
                     onChange={(e) => setCustomAmenity(prev => ({ ...prev, name: e.target.value }))}
                     onKeyPress={(e) => e.key === 'Enter' && handleAddCustomAmenity()}
                     placeholder="Enter amenity name"
-                    className="flex-1 px-3 py-2 bg-white text-slate-900 border-2 border-slate-200 rounded-lg"
+                    className="flex-1 px-3 py-1.5 bg-white text-slate-900 border-2 border-slate-300 rounded-lg text-xs focus:border-teal-500 focus:ring-2 focus:ring-teal-200 outline-none"
                   />
                   <button
                     onClick={handleAddCustomAmenity}
-                    className="px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 font-medium"
+                    className="px-4 py-1.5 bg-gradient-to-r from-teal-500 to-cyan-500 text-white rounded-lg hover:from-teal-600 hover:to-cyan-600 font-semibold shadow-md hover:shadow-lg transition-all text-xs"
                   >
                     Add
                   </button>
@@ -1571,18 +2048,18 @@ const Destinations = () => {
               </div>
 
               {/* Selected Amenities */}
-              <div className="bg-teal-50 rounded-lg p-3 border border-teal-200">
-                <p className="text-sm text-teal-900 font-medium mb-2">
-                  <strong>{selectedAmenities.length}</strong> amenities selected
+              <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-lg p-2 border-2 border-teal-300 shadow-md">
+                <p className="text-xs text-teal-900 font-bold mb-1.5">
+                  <strong className="text-sm">{selectedAmenities.length}</strong> amenities selected
                 </p>
                 {selectedAmenities.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1">
                     {selectedAmenities.map((amenity, index) => (
                       <span
                         key={index}
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-white rounded-lg text-xs font-medium text-slate-700 border border-teal-300"
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-white rounded-md text-[10px] font-semibold text-slate-800 border border-teal-300 shadow-sm"
                       >
-                        <span>{typeof amenity === 'object' ? amenity.icon : '✨'}</span>
+                        <span className="text-sm">{typeof amenity === 'object' ? amenity.icon : '✨'}</span>
                         <span>{typeof amenity === 'object' ? amenity.name : amenity}</span>
                       </span>
                     ))}
@@ -1594,38 +2071,59 @@ const Destinations = () => {
 
           {/* Operating Hours Section */}
           {activeSection === 'hours' && (
-            <div className="space-y-3">
-              <h3 className="font-medium text-slate-900">Operating Hours</h3>
-              <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-2">
+              <h3 className="text-base font-semibold text-slate-800">Operating Hours</h3>
+              <p className="text-xs text-slate-600 mb-2">Click on a day card to toggle open/closed status</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {operatingHours.map((schedule, index) => (
-                  <div key={schedule.day} className="flex flex-col gap-1.5 p-2 bg-slate-50 rounded border border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-slate-900 text-xs">{schedule.day}</span>
-                      <label className="flex items-center gap-1">
-                        <input
-                          type="checkbox"
-                          checked={schedule.isClosed}
-                          onChange={(e) => handleOperatingHoursChange(index, 'isClosed', e.target.checked)}
-                          className="w-3 h-3 text-teal-500 rounded"
-                        />
-                        <span className="text-xs text-slate-600">Closed</span>
-                      </label>
+                  <div 
+                    key={schedule.day}
+                    onClick={() => handleOperatingHoursChange(index, 'isClosed', !schedule.isClosed)}
+                    className={`
+                      relative p-2 rounded-lg border-2 cursor-pointer transition-all duration-200
+                      ${schedule.isClosed 
+                        ? 'bg-slate-100 border-slate-300 hover:border-slate-400 shadow-sm' 
+                        : 'bg-gradient-to-br from-teal-50 to-cyan-50 border-teal-300 hover:border-teal-400 hover:shadow-lg shadow-md'
+                      }
+                    `}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-slate-900 text-xs">{schedule.day}</span>
+                      <div className={`
+                        px-2 py-0.5 rounded-full text-[10px] font-semibold
+                        ${schedule.isClosed 
+                          ? 'bg-slate-300 text-slate-700' 
+                          : 'bg-teal-500 text-white'
+                        }
+                      `}>
+                        {schedule.isClosed ? 'Closed' : 'Open'}
+                      </div>
                     </div>
                     {!schedule.isClosed && (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="time"
-                          value={schedule.opens}
-                          onChange={(e) => handleOperatingHoursChange(index, 'opens', e.target.value)}
-                          className="flex-1 px-1.5 py-1 bg-white border border-slate-200 rounded text-xs text-slate-900"
-                        />
-                        <span className="text-slate-400 text-xs">-</span>
-                        <input
-                          type="time"
-                          value={schedule.closes}
-                          onChange={(e) => handleOperatingHoursChange(index, 'closes', e.target.value)}
-                          className="flex-1 px-1.5 py-1 bg-white border border-slate-200 rounded text-xs text-slate-900"
-                        />
+                      <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] font-medium text-slate-600 w-10">Opens:</label>
+                          <input
+                            type="time"
+                            value={schedule.opens}
+                            onChange={(e) => handleOperatingHoursChange(index, 'opens', e.target.value)}
+                            className="flex-1 px-2 py-1 bg-white border border-slate-200 rounded text-xs text-slate-900 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500/20"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] font-medium text-slate-600 w-10">Closes:</label>
+                          <input
+                            type="time"
+                            value={schedule.closes}
+                            onChange={(e) => handleOperatingHoursChange(index, 'closes', e.target.value)}
+                            className="flex-1 px-2 py-1 bg-white border border-slate-200 rounded text-xs text-slate-900 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500/20"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {schedule.isClosed && (
+                      <div className="mt-2 text-center text-sm text-slate-500 italic">
+                        Click to mark as open
                       </div>
                     )}
                   </div>
@@ -1636,28 +2134,26 @@ const Destinations = () => {
 
           {/* QR Code Section */}
           {activeSection === 'qrcode' && (
-            <div className="space-y-3">
-              <h3 className="font-medium text-slate-900">QR Code for Check-in</h3>
+            <div className="space-y-2">
+              <h3 className="text-base font-semibold text-slate-800">QR Code for Check-in</h3>
               
-              <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-lg p-6 border-2 border-teal-200">
-                <div className="text-center space-y-4">
+              <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-lg p-3 border-2 border-teal-300 shadow-lg">
+                <div className="flex flex-col items-center space-y-2">
                   {formData.qrCode ? (
                     <>
-                      <div className="flex justify-center">
-                        <div className="bg-white p-4 rounded-lg shadow-lg">
-                          <QRCodeSVG 
-                            value={formData.qrCode}
-                            size={200}
-                            level="H"
-                            includeMargin={true}
-                          />
-                        </div>
+                      <div className="bg-white p-2 rounded-lg shadow-md">
+                        <QRCodeSVG 
+                          value={formData.qrCode}
+                          size={140}
+                          level="H"
+                          includeMargin={true}
+                        />
                       </div>
                       
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-slate-700">QR Code Value:</p>
-                        <div className="bg-white px-4 py-3 rounded-lg border border-teal-300">
-                          <code className="text-teal-600 font-mono text-sm">{formData.qrCode}</code>
+                      <div className="w-full max-w-md space-y-1">
+                        <p className="text-xs font-semibold text-center text-slate-700">QR Code Value:</p>
+                        <div className="bg-white px-3 py-1.5 rounded-lg border-2 border-teal-300 shadow-sm">
+                          <code className="block text-center text-teal-600 font-mono text-xs font-medium">{formData.qrCode}</code>
                         </div>
                       </div>
                       
@@ -1673,14 +2169,14 @@ const Destinations = () => {
                           }));
                           toast.success('QR Code regenerated!');
                         }}
-                        className="px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition-colors"
+                        className="px-4 py-1.5 bg-gradient-to-r from-teal-500 to-cyan-500 text-white rounded-lg hover:from-teal-600 hover:to-cyan-600 transition-all shadow-md font-semibold text-xs"
                       >
                         Regenerate QR Code
                       </button>
                     </>
                   ) : (
-                    <div className="py-8">
-                      <p className="text-slate-600 mb-4">No QR code generated yet</p>
+                    <div className="py-4">
+                      <p className="text-slate-600 mb-3 text-center text-sm">No QR code generated yet</p>
                       <button
                         type="button"
                         onClick={() => {
@@ -1693,7 +2189,7 @@ const Destinations = () => {
                           }));
                           toast.success('QR Code generated!');
                         }}
-                        className="px-6 py-3 bg-gradient-to-r from-teal-500 to-cyan-500 text-white rounded-lg hover:from-teal-600 hover:to-cyan-600 transition-all shadow-lg"
+                        className="px-5 py-2 bg-gradient-to-r from-teal-500 to-cyan-500 text-white rounded-lg hover:from-teal-600 hover:to-cyan-600 transition-all shadow-lg font-semibold text-sm"
                       >
                         Generate QR Code
                       </button>
@@ -1702,8 +2198,8 @@ const Destinations = () => {
                 </div>
               </div>
               
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
+              <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-2 shadow-sm">
+                <p className="text-xs text-blue-800">
                   <strong>ℹ️ Info:</strong> QR codes are automatically generated based on the destination's category, name, and ID. 
                   Users will scan this QR code when they visit the destination to earn points and leave a review.
                 </p>
@@ -1764,47 +2260,84 @@ const Destinations = () => {
       
       <ToastNotification />
       <FetchingIndicator isFetching={isFetching} />
-      <AdminHeader 
-        admin={getCurrentAdmin()}
-        onLogout={handleLogout}
-        searchQuery={searchQuery}
-        onSearchChange={handleSearchChange}
-        sidebarCollapsed={sidebarCollapsed}
-      />
       <DashboardTabs onCollapseChange={setSidebarCollapsed} />
       {/* Main Content */}
-      <main 
-        className={`
-          relative z-10
-          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
-          max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 pt-20 sm:pt-24 md:pt-28 pb-8 sm:pb-10 md:pb-12
-        `}
-      >
-        {/* Page Header with Add Button */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Destinations</h1>
-              <p className="text-sm text-gray-600 mt-1">Manage your travel destinations</p>
+      <div className={`transition-all duration-300 pb-16 md:pb-0 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+        {/* Page Header - Full Width */}
+        <header className="bg-gradient-to-r from-teal-500 to-cyan-600 shadow-lg mt-14 md:mt-16 lg:mt-0 md:sticky md:top-16 lg:sticky lg:top-0 z-30">
+          <div className="px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-1">Destinations</h1>
+                <p className="text-sm text-teal-50 mt-1">Manage your travel destinations</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
+                  <Clock className="w-5 h-5 text-white" />
+                  <span className="text-sm font-medium text-white">{new Date().toLocaleDateString()}</span>
+                </div>
+                <AddButton
+                  onClick={handleAddDestination}
+                  icon={Plus}
+                >
+                  Add Destination
+                </AddButton>
+              </div>
             </div>
-            <Button
-              variant="primary"
-              onClick={handleAddDestination}
-              icon={<Plus className="w-5 h-5" />}
-              className="bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700"
-            >
-              Add Destination
-            </Button>
+          </div>
+        </header>
+
+        {/* Content with Padding */}
+        <main className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto mt-6">
+        
+        {/* Search and Filter - Always visible */}
+        <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start justify-between mb-6">
+          <div className="flex-1 lg:max-w-2xl">
+            <SearchFilter
+              searchQuery={searchQuery}
+              onSearchChange={handleSearchChange}
+              selectedCategory={selectedCategory}
+              onCategoryChange={handleCategoryChange}
+              categories={categories.map(cat => ({ id: cat.id, value: cat.id, name: cat.name, icon: cat.icon, label: cat.name }))}
+              placeholder="Search destinations..."
+              showFilter={true}
+            />
+          </div>
+          <div className="flex-shrink-0">
+            <ViewToggle 
+              view={viewMode} 
+              onViewChange={(mode) => {
+                setViewMode(mode);
+                localStorage.setItem('destinations_view_mode', mode);
+              }} 
+            />
           </div>
         </div>
 
-        {destinations.length === 0 && isFetching ? (
-          <div className="space-y-6">
-            <div className="mb-4">
-              <div className="h-8 bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 rounded-lg w-64 animate-pulse"></div>
-            </div>
-            <DestinationSkeletonGrid count={6} />
+        {/* Results Count - Always visible */}
+        {!initialLoading && (
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">
+              {totalDestinations} Destinations Found
+            </h2>
           </div>
+        )}
+
+        {/* Content Area */}
+        {initialLoading ? (
+          viewMode === 'card' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <SkeletonLoader type="card" count={6} />
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl shadow-md border-2 border-teal-200 overflow-hidden">
+              <table className="min-w-full">
+                <tbody>
+                  <SkeletonLoader type="table-row" count={6} />
+                </tbody>
+              </table>
+            </div>
+          )
         ) : destinations.length === 0 ? (
           <div className="flex items-center justify-center py-32">
             <div className="text-center space-y-4">
@@ -1814,53 +2347,143 @@ const Destinations = () => {
                 </svg>
               </div>
               <p className="text-slate-600 text-lg">No destinations found</p>
-              <Button 
-                variant="primary" 
+              <AddButton
                 onClick={handleAddDestination}
-                icon={<Plus className="w-5 h-5" />}
-                className="bg-gradient-to-r from-teal-500 to-cyan-600"
+                icon={Plus}
               >
                 Add First Destination
-              </Button>
+              </AddButton>
             </div>
           </div>
         ) : (
           <>
-        {/* Results Count - Clean Typography */}
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">
-            {totalDestinations} Destinations Found
-          </h2>
-        </div>
-
         {/* Cards Grid */}
         {paginatedDestinations.length > 0 ? (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6 mb-6 relative">
-              {paginatedDestinations.map((destination) => (
-                <div key={destination.id}>
-                  <DestinationCard
-                    title={destination.title}
-                    category={destination.category}
-                    categoryColor={destination.categoryColor}
-                    categoryIcon={destination.categoryIcon}
-                    description={destination.description}
-                    points={destination.points}
-                    location={destination.location}
-                    street={destination.street}
-                    barangay={destination.barangay}
-                    rating={destination.rating}
-                    image_url={destination.image_url}
-                    latitude={destination.latitude}
-                    longitude={destination.longitude}
-                    visitors={destination.visitors}
-                    onView={() => handleView(destination)}
-                    onEdit={() => handleEdit(destination)}
-                    onDelete={() => handleDelete(destination)}
-                  />
+            {viewMode === 'card' ? (
+              <motion.div
+                key={`destinations-page-${currentPage}`}
+                variants={staggerContainer}
+                initial="hidden"
+                animate="visible"
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6 relative"
+              >
+                {paginatedDestinations.map((destination) => (
+                  <AnimatedCard key={destination.id}>
+                    <DestinationCard
+                      title={destination.title}
+                      category={destination.category}
+                      categoryColor={destination.categoryColor}
+                      categoryIcon={destination.categoryIcon}
+                      categoryIconUrl={destination.categoryIconUrl}
+                      description={destination.description}
+                      points={destination.points}
+                      location={destination.location}
+                      street={destination.street}
+                      barangay={destination.barangay}
+                      rating={destination.rating}
+                      image_url={destination.image_url}
+                      latitude={destination.latitude}
+                      longitude={destination.longitude}
+                      visitors={destination.visitors}
+                      ownerName={destination.owner_name}
+                      onView={() => handleView(destination)}
+                      onEdit={() => handleEdit(destination)}
+                      onDelete={() => handleDelete(destination)}
+                    />
+                  </AnimatedCard>
+                ))}
+              </motion.div>
+            ) : (
+              <div className="bg-gradient-to-br from-white via-teal-50/30 to-cyan-50/30 rounded-xl shadow-[0_8px_20px_rgba(20,184,166,0.15)] border-2 border-teal-200 overflow-hidden mb-6">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gradient-to-r from-teal-100 to-cyan-100 border-b-2 border-teal-300">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Image</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Name</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Category</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Location</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Points</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Visitors</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Owner</th>
+                        <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-slate-200">
+                      {paginatedDestinations.map((destination) => (
+                        <tr key={destination.id} className="hover:bg-gradient-to-r hover:from-teal-50 hover:to-cyan-50 transition-colors duration-150">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <img 
+                              src={destination.image_url ? `http://localhost:8000/storage/${destination.image_url}` : 'https://via.placeholder.com/150'} 
+                              alt={destination.title}
+                              onError={(e) => { e.target.src = 'https://via.placeholder.com/150'; }}
+                              className="w-16 h-16 object-cover rounded-lg border-2 border-slate-200"
+                            />
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="font-semibold text-slate-900">{destination.title}</div>
+                            <div className="text-sm text-slate-600 truncate max-w-xs">{destination.description}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${destination.categoryColor}`}>
+                              <span>{destination.categoryIcon}</span>
+                              <span>{destination.category}</span>
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-slate-900">{destination.barangay}</div>
+                            <div className="text-xs text-slate-600">{destination.location}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-teal-50 text-teal-700 rounded-lg text-sm font-semibold">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                              </svg>
+                              {destination.points}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{destination.visitors || 0}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">{destination.owner_name || 'N/A'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => handleView(destination)}
+                                className="p-2 bg-gradient-to-br from-teal-400 to-cyan-500 text-white rounded-lg hover:from-teal-500 hover:to-cyan-600 transition-all shadow-md"
+                                title="View"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => handleEdit(destination)}
+                                className="p-2 bg-gradient-to-br from-blue-400 to-indigo-500 text-white rounded-lg hover:from-blue-500 hover:to-indigo-600 transition-all shadow-md"
+                                title="Edit"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => handleDelete(destination)}
+                                className="p-2 bg-gradient-to-br from-red-400 to-pink-500 text-white rounded-lg hover:from-red-500 hover:to-pink-600 transition-all shadow-md"
+                                title="Delete"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
 
             {/* Pagination */}
             {totalDestinations > itemsPerPage && (
@@ -1892,10 +2515,14 @@ const Destinations = () => {
         )}
         </>
         )}
-      </main>
+        </main>
+      </div>
+
       <Modal 
         isOpen={modalState.isOpen} 
         onClose={closeModal}
+        size={modalState.mode === 'delete' ? 'md' : '2xl'}
+        scrollable={false}
         titleIcon={
           modalState.mode === 'view' ? (
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1990,7 +2617,6 @@ const Destinations = () => {
             </>
           )
         } 
-        size={modalState.mode === 'view' ? 'xl' : modalState.mode === 'delete' ? 'sm' : '2xl'}
       >
         {renderModalContent()}
       </Modal>

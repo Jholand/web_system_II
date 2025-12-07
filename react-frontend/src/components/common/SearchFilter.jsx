@@ -1,4 +1,5 @@
 import React from 'react';
+import CategoryDropdown from './CategoryDropdown';
 
 const SearchFilter = ({ 
   searchQuery, 
@@ -10,7 +11,7 @@ const SearchFilter = ({
   showFilter = true 
 }) => {
   return (
-    <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-4 mb-6 shadow-sm">
+    <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-xl p-4 shadow-sm w-full">
       <div className="flex flex-col lg:flex-row gap-4">
         {/* Search Input */}
         <div className="flex-1">
@@ -33,30 +34,11 @@ const SearchFilter = ({
         {/* Category Filter */}
         {showFilter && categories && (
           <div className="lg:w-64">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-              </div>
-              <select
-                value={selectedCategory}
-                onChange={(e) => onCategoryChange(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-white border-2 border-purple-200 rounded-xl text-slate-900 font-medium focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all appearance-none cursor-pointer"
-              >
-                <option value="all">All Categories</option>
-                {categories.map((category, index) => (
-                  <option key={category.value || category.id || `cat-${index}`} value={category.value}>
-                    {category.label}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </div>
+            <CategoryDropdown
+              selectedCategory={selectedCategory}
+              onCategoryChange={onCategoryChange}
+              categories={categories}
+            />
           </div>
         )}
       </div>

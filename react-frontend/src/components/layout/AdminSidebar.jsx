@@ -10,12 +10,22 @@ import {
   Wallet,
   Settings,
   Trophy,
-  ChevronLeft
+  ChevronLeft,
+  LogOut
 } from 'lucide-react';
+import { getCurrentAdmin } from '../../utils/adminHelper';
+import toast from 'react-hot-toast';
 
 const AdminSidebar = ({ collapsed, onToggleCollapse }) => {
   const navigate = useNavigate();
   const location = useLocation();
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('admin_data');
+    toast.success('Logged out successfully!');
+    navigate('/');
+  };
 
   const menuItems = [
     { icon: Map, label: 'Explore Map', path: '/admin/map', color: 'teal' },
@@ -86,21 +96,32 @@ const AdminSidebar = ({ collapsed, onToggleCollapse }) => {
       </nav>
 
       {/* User Profile at Bottom */}
-      {!collapsed && (
-        <div className="absolute bottom-4 left-0 right-0 px-3">
-          <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl p-3 border border-teal-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-full flex items-center justify-center text-white font-semibold">
-                U
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">John Doe</p>
-                <p className="text-xs text-teal-600">Level 5</p>
+      {!collapsed && (() => {
+        const currentUser = getCurrentAdmin();
+        const userInitial = currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U';
+        return (
+          <div className="absolute bottom-4 left-0 right-0 px-3 space-y-2">
+            <div className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-xl p-3 border border-teal-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-full flex items-center justify-center text-white font-semibold">
+                  {userInitial}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{currentUser.name}</p>
+                  <p className="text-xs text-teal-600">{currentUser.role}</p>
+                </div>
               </div>
             </div>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-3 py-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="text-sm font-medium">Logout</span>
+            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Collapse Toggle */}
       <button

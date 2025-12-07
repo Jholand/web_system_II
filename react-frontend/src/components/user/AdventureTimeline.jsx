@@ -18,17 +18,10 @@ const AdventureTimeline = React.memo(({ visits, totalVisits }) => {
   };
 
   return (
-    <div className="bg-white rounded-2xl p-6 border border-teal-100 shadow-sm hover:shadow-lg transition-shadow duration-150">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-md shadow-teal-500/30">
-            <MapPin className="w-5 h-5 text-white" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h3 className="text-xl font-bold bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">Adventure Timeline</h3>
-            <p className="text-xs text-gray-600">{totalVisits.toLocaleString()} destinations visited</p>
-          </div>
-        </div>
+    <div className="bg-white rounded-2xl p-6 border border-teal-200 shadow-sm hover:shadow-md transition-shadow duration-200">
+      <div className="mb-5">
+        <h3 className="text-xl font-bold text-gray-900 mb-1">Adventure Timeline</h3>
+        <p className="text-sm text-gray-500">{totalVisits.toLocaleString()} destinations visited</p>
       </div>
 
       {displayVisits.length > 0 ? (
@@ -65,7 +58,7 @@ const AdventureTimeline = React.memo(({ visits, totalVisits }) => {
               </div>
               
               <div className="flex-shrink-0 text-right">
-                <div className="flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-br from-orange-500 to-amber-600 rounded-lg shadow-sm">
+                <div className="flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg shadow-sm">
                   <Coins className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
                   <span className="text-sm font-bold text-white">+{visit.points || 0}</span>
                 </div>

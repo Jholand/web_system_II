@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { staggerContainer, slideInFromRight } from '../../utils/animations';
+import { Clock, Users, MapPin, Award, Gift } from 'lucide-react';
 import AnimatedPage from '../../components/common/AnimatedPage';
 import AdminHeader from '../../components/common/AdminHeader';
 import DashboardTabs from '../../components/dashboard/DashboardTabs';
-import StatCard from '../../components/dashboard/StatCard';
 import VisitsPointsTrend from '../../components/dashboard/VisitsPointsTrend';
 import MonthlyDistribution from '../../components/dashboard/MonthlyDistribution';
 import { getCurrentAdmin } from '../../utils/adminHelper';
@@ -88,111 +88,94 @@ const Dashboard = React.memo(() => {
         {/* Dot Pattern */}
         <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #0d9488 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
       </div>
-      
-      <AdminHeader 
-        admin={getCurrentAdmin()}
-        onLogout={handleLogout}
-        sidebarCollapsed={sidebarCollapsed}
-      />
 
       {/* Sidebar Navigation */}
       <DashboardTabs onCollapseChange={setSidebarCollapsed} />
 
       {/* Main Content */}
-      <main 
-        className={`
-          relative z-10
-          transition-all duration-300 ease-in-out
-          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'} 
-          max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 pt-20 sm:pt-24 md:pt-28 pb-8 sm:pb-10 md:pb-12
-        `}
-      >
-        {/* Page Header */}
-        <div className="mb-6 sm:mb-8 relative">
-          <div className="bg-white/60 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl border border-white/20">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg">
-                <svg className="w-6 h-6 sm:w-8 sm:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
+      <div className={`transition-all duration-300 pb-16 md:pb-0 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+        {/* Page Header - Full Width */}
+        <header className="bg-gradient-to-r from-teal-500 to-cyan-600 shadow-lg mt-14 md:mt-16 lg:mt-0 md:sticky md:top-16 lg:sticky lg:top-0 z-30">
+          <div className="px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-1">Dashboard Overview</h1>
+                <p className="text-sm text-teal-50 mt-1">Real-time system analytics and metrics</p>
               </div>
-              <div className="flex-1">
-                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
-                  Dashboard Overview
-                </h1>
-                <p className="text-slate-600 text-sm sm:text-base mt-1">Real-time system analytics and metrics</p>
-              </div>
-              {loading && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-teal-50 rounded-lg border border-teal-200">
-                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-teal-600"></div>
-                  <span className="text-xs font-medium text-teal-700">Updating...</span>
+              <div className="flex items-center gap-3">
+                {loading && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                    <span className="text-xs font-medium text-white">Updating...</span>
+                  </div>
+                )}
+                <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg border border-white/30">
+                  <Clock className="w-5 h-5 text-white" />
+                  <span className="text-sm font-medium text-white">{new Date().toLocaleDateString()}</span>
                 </div>
-              )}
+              </div>
             </div>
           </div>
-        </div>
+        </header>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-          <div className="h-full">
-            <StatCard
-              title="Total Users"
-              value={allDashboardData?.[currentPeriod]?.overview?.total_users || "0"}
-              change={`${allDashboardData?.[currentPeriod]?.overview?.users_growth > 0 ? '+' : ''}${allDashboardData?.[currentPeriod]?.overview?.users_growth || 0}% from last month`}
-              changeType={allDashboardData?.[currentPeriod]?.overview?.users_growth >= 0 ? "positive" : "negative"}
-              icon={
-                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
-                </svg>
-              }
-              iconBg="bg-gradient-to-br from-teal-500 to-teal-600"
-            />
+        {/* Main Content with Padding */}
+        <main className="px-4 sm:px-6 lg:px-8 py-8 max-w-7xl mx-auto mt-6">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          {/* Total Users */}
+          <div className="bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl shadow-xl p-6 text-white transform hover:scale-105 transition-transform duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-teal-100 mb-1">Total Users</p>
+                <p className="text-4xl font-bold">{allDashboardData?.[currentPeriod]?.overview?.total_users || 0}</p>
+                <p className="text-xs text-teal-100 mt-1">Registered accounts</p>
+              </div>
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
+                <Users className="w-8 h-8 text-white" />
+              </div>
+            </div>
           </div>
-          <div className="h-full">
-            <StatCard
-              title="Total Check-ins"
-              value={allDashboardData?.[currentPeriod]?.overview?.total_checkins || "0"}
-              change={`${allDashboardData?.[currentPeriod]?.overview?.checkins_growth > 0 ? '+' : ''}${allDashboardData?.[currentPeriod]?.overview?.checkins_growth || 0}% from last month`}
-              changeType={allDashboardData?.[currentPeriod]?.overview?.checkins_growth >= 0 ? "positive" : "negative"}
-              icon={
-                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              }
-              iconBg="bg-gradient-to-br from-emerald-500 to-emerald-600"
-            />
+
+          {/* Total Destinations */}
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-xl p-6 text-white transform hover:scale-105 transition-transform duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-blue-100 mb-1">Total Destinations</p>
+                <p className="text-4xl font-bold">{allDashboardData?.[currentPeriod]?.overview?.total_destinations || 0}</p>
+                <p className="text-xs text-blue-100 mt-1">Active locations</p>
+              </div>
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
+                <MapPin className="w-8 h-8 text-white" />
+              </div>
+            </div>
           </div>
-          <div className="h-full">
-            <StatCard
-              title="Points Awarded"
-              value={allDashboardData?.[currentPeriod]?.overview?.total_points || "0"}
-              change={`${allDashboardData?.[currentPeriod]?.overview?.points_growth > 0 ? '+' : ''}${allDashboardData?.[currentPeriod]?.overview?.points_growth || 0}% from last month`}
-              changeType={allDashboardData?.[currentPeriod]?.overview?.points_growth >= 0 ? "positive" : "negative"}
-              icon={
-                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
-                </svg>
-              }
-              iconBg="bg-gradient-to-br from-cyan-500 to-cyan-600"
-            />
+
+          {/* Total Badges */}
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-xl p-6 text-white transform hover:scale-105 transition-transform duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-purple-100 mb-1">Total Badges</p>
+                <p className="text-4xl font-bold">{allDashboardData?.[currentPeriod]?.overview?.total_badges || 0}</p>
+                <p className="text-xs text-purple-100 mt-1">Achievement types</p>
+              </div>
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
+                <Award className="w-8 h-8 text-white" />
+              </div>
+            </div>
           </div>
-          <div className="h-full">
-            <StatCard
-              title="Rewards Claimed"
-              value={allDashboardData?.[currentPeriod]?.overview?.rewards_claimed || "0"}
-              change={`${allDashboardData?.[currentPeriod]?.overview?.rewards_growth > 0 ? '+' : ''}${allDashboardData?.[currentPeriod]?.overview?.rewards_growth || 0}% from last month`}
-              changeType={allDashboardData?.[currentPeriod]?.overview?.rewards_growth >= 0 ? "positive" : "negative"}
-              icon={
-                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                </svg>
-              }
-              iconBg="bg-gradient-to-br from-purple-500 to-pink-500"
-            />
+
+          {/* Total Rewards */}
+          <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl shadow-xl p-6 text-white transform hover:scale-105 transition-transform duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-orange-100 mb-1">Total Rewards</p>
+                <p className="text-4xl font-bold">{allDashboardData?.[currentPeriod]?.overview?.total_rewards || 0}</p>
+                <p className="text-xs text-orange-100 mt-1">Available rewards</p>
+              </div>
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center">
+                <Gift className="w-8 h-8 text-white" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -209,7 +192,8 @@ const Dashboard = React.memo(() => {
         <div>
           <QuickStats data={allDashboardData} currentPeriod={currentPeriod} />
         </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 });

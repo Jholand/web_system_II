@@ -88,9 +88,39 @@ class DestinationImageController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, DestinationImage $destinationImage)
+    public function update(Request $request, $id)
     {
-        //
+        $validated = $request->validate([
+            'title' => 'nullable|string|max:255',
+            'is_primary' => 'nullable|boolean',
+        ]);
+
+        try {
+            $image = DestinationImage::findOrFail($id);
+            
+            // If this image is set as primary, unset all other primary images for this destination
+            if (isset($validated['is_primary']) && $validated['is_primary']) {
+                DestinationImage::where('destination_id', $image->destination_id)
+                    ->where('destination_images_id', '!=', $id)
+                    ->update(['is_primary' => 0]);
+            }
+            
+            // Update the image record
+            $image->update([
+                'title' => $validated['title'] ?? $image->title,
+                'is_primary' => $validated['is_primary'] ?? $image->is_primary,
+            ]);
+
+            return response()->json([
+                'message' => 'Image updated successfully',
+                'data' => $image,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Failed to update image',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
